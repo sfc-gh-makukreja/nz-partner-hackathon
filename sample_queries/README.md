@@ -17,6 +17,18 @@ This directory contains sample SQL queries for each Matariki theme, organized by
   - `electricity_quarterly_generation` - Historical quarterly generation trends (101 quarters, 2000-2025)
     - **Source**: [MBIE Electricity Statistics](https://www.mbie.govt.nz/building-and-energy/energy-and-natural-resources/energy-statistics-and-modelling/energy-statistics/electricity-statistics)
     - **File**: `electricity-2025-q1.xlsx` (processed)
+- **Sample Queries**:
+  | Category | Status | Sample Results |
+  | -------- | ------ | -------------- |
+  | Exploratory Queries | ✅ Working | 8,345 zone records, 19 fuel years, 101 quarters |
+  | Peak Demand Analysis | ✅ Working | Hourly patterns, weekend vs weekday trends |
+  | Regional Analysis | ✅ Working | Auckland: 930MW avg, Wellington: 413MW avg |
+  | Renewable Trends | ✅ Working | 90.48% renewable in 2023, 4.96% improvement in 2022 |
+  | AI/ML Features | ✅ Working | Lag features, rolling averages, time features |
+  | Wind Energy Analysis | ✅ Working | Wellington 23.3% variability, Taranaki 17.4% |
+  | Cortex AI | ✅ Working | Generated comprehensive optimization strategies |
+  | Business Insights | ✅ Working | Grid stability, load forecasting, correlations |
+
 - **Use Cases**: Peak demand prediction, renewable optimization, grid planning
 
 ### 🔄 TIPUĀNUKU (Food & Agriculture) - **COMING SOON**

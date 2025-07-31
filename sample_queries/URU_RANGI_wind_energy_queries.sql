@@ -2,6 +2,8 @@
 -- Theme: Wind, Energy, Climate, and Renewable Power
 -- Data Available: Electricity zone demand (5-min intervals), renewable generation, historical trends
 
+
+
 USE DATABASE nz_partner_hackathon;
 USE SCHEMA URU_RANGI;
 
