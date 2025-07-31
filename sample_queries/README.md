@@ -43,11 +43,16 @@ This directory contains sample SQL queries for each Matariki theme, organized by
 - **Planned Sources**: [LINZ Tide Predictions](https://www.linz.govt.nz/products-services/tides-and-tidal-streams/tide-predictions), NIWA marine data, Fisheries NZ
 - **Sample Queries**: Will be created once data is loaded
 
-### 🔄 WAIPUNA_RANGI (Rain & Water) - **COMING SOON**
-- **Status**: Awaiting water/weather dataset upload  
-- **Planned Data**: Rainfall, flooding, insurance claims
-- **Planned Sources**: NIWA climate data, regional council flood data, insurance industry data
-- **Sample Queries**: Will be created once data is loaded
+### ✅ WAIPUNA_RANGI (Rain & Water) - **DATA AVAILABLE**
+- **File**: `WAIPUNA_RANGI_climate_queries.sql`
+- **Data**: Real NIWA climate station data (103 annual records, 1933-2022)
+- **Tables**:
+  - `rainfall_annual` - Annual rainfall statistics by weather station (103 records)
+    - **Source**: [NIWA Climate Station Statistics](https://niwa.co.nz/climate-and-weather/climate-data/national-climate-database/climate-stations-statistics)
+    - **Coverage**: 3 stations, 89 years (1933-2022)
+  - `climate_stations` - Station metadata and geographic information
+    - **Details**: Historic (1464), primary (2109), and modern (4960) stations
+- **Use Cases**: Drought prediction, flood risk assessment, water resource planning
 
 ### 🔄 HIWA_I_TE_RANGI (Travel & Tourism) - **COMING SOON**
 - **Status**: Awaiting travel/tourism dataset upload
