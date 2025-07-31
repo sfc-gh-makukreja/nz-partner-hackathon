@@ -1,0 +1,128 @@
+---
+description: Snowflake CI/CD deployment patterns and automated workflows
+---
+
+# Snowflake CI/CD Deployment
+
+## Deployment Architecture
+
+### Infrastructure-as-Code Pattern
+- [setup.sql](mdc:setup.sql) contains all infrastructure definitions
+- [deploy.sh](mdc:deploy.sh) orchestrates deployment
+- Git integration handles automatic synchronization
+- Streamlit apps deploy directly from Git branches
+
+### Separation of Concerns
+```
+setup.sql      → Database objects, stages, Git repos, Streamlit creation
+deploy.sh      → Deployment orchestration and validation
+streamlit_app.py → Application logic only
+environment.yml → Python dependencies
+```
+
+## CI/CD Best Practices
+
+### Automated Deployment Pipeline
+1. **Git Push** → Triggers deployment workflow
+2. **Infrastructure Setup** → Execute `setup.sql` 
+3. **Git Sync** → Snowflake pulls latest code
+4. **App Refresh** → Streamlit automatically updates
+
+### Zero-Downtime Deployment
+```sql
+-- Create new version first
+CREATE OR REPLACE STREAMLIT app_name_v2
+  FROM @repo_name/branches/main/
+  MAIN_FILE = 'streamlit_app.py';
+
+-- Switch after validation
+ALTER STREAMLIT app_name RENAME TO app_name_old;
+ALTER STREAMLIT app_name_v2 RENAME TO app_name;
+```
+
+### Environment Management
+```bash
+# Development deployment
+export SNOWFLAKE_ENV=dev
+snow sql -f setup.sql --connection dev
+
+# Production deployment  
+export SNOWFLAKE_ENV=prod
+snow sql -f setup.sql --connection prod
+```
+
+## Git Integration Workflows
+
+### Feature Branch Deployment
+```sql
+-- Test on feature branch
+CREATE STREAMLIT ${app_name}_feature
+  FROM @repo_name/branches/feature/branch-name/
+  MAIN_FILE = 'streamlit_app.py';
+```
+
+### Production Release
+```sql
+-- Deploy from main branch
+CREATE OR REPLACE STREAMLIT ${app_name}
+  FROM @repo_name/branches/main/
+  MAIN_FILE = 'streamlit_app.py';
+```
+
+### Rollback Strategy
+```sql
+-- Quick rollback to previous commit
+CREATE OR REPLACE STREAMLIT app_name
+  FROM @repo_name/commits/previous-commit-hash/
+  MAIN_FILE = 'streamlit_app.py';
+```
+
+## Monitoring and Validation
+
+### Deployment Health Checks
+```bash
+# Validate app accessibility
+curl -f "https://app.snowflake.com/ACCOUNT/streamlit/APP_NAME" || exit 1
+
+# Check Git repository sync
+snow sql -q "SHOW GIT REPOSITORIES LIKE 'repo_name'" || exit 1
+```
+
+### Error Handling
+```bash
+set -e  # Exit on any error
+trap 'echo "❌ Deployment failed at line $LINENO"' ERR
+
+# Rollback on failure
+deploy() {
+  if ! snow sql -f setup.sql; then
+    echo "🔄 Rolling back..."
+    git_rollback_previous_version
+    exit 1
+  fi
+}
+```
+
+## Security and Compliance
+
+### Credential Management
+- Use Snowflake secrets for Git authentication
+- Never embed tokens in code
+- Rotate credentials regularly
+- Use least-privilege access
+
+### Access Control
+```sql
+-- Limit Git repository access
+GRANT USAGE ON GIT REPOSITORY repo_name TO ROLE developer_role;
+GRANT READ ON GIT REPOSITORY repo_name TO ROLE readonly_role;
+```
+
+### Audit Trail
+```sql
+-- Track deployment history
+SELECT *
+FROM SNOWFLAKE.ACCOUNT_USAGE.STREAMLIT_EVENTS
+WHERE STREAMLIT_NAME = 'app_name'
+ORDER BY TIMESTAMP DESC;
+```

@@ -1,0 +1,90 @@
+---
+description: Streamlit camera input and image processing best practices
+globs: "*streamlit*.py,streamlit_app.py"
+---
+
+# Streamlit Camera Input Best Practices
+
+## Camera Input Implementation
+Use `st.camera_input()` for real device camera access in Streamlit in Snowflake:
+
+```python
+# Provide both camera and upload options with tabs
+tab1, tab2 = st.tabs(["📷 Camera", "📁 Upload"])
+
+image = None
+
+with tab1:
+    st.markdown("**Use your device camera**")
+    camera_image = st.camera_input("Take a picture")
+    
+    if camera_image is not None:
+        image = Image.open(camera_image)
+        st.image(image, caption="Camera Photo", use_container_width=True)
+
+with tab2:
+    st.markdown("**Upload an image file**")
+    uploaded_file = st.file_uploader("Choose a photo", type=['jpg', 'jpeg', 'png'])
+    
+    if uploaded_file is not None:
+        image = Image.open(uploaded_file)
+        st.image(image, caption="Uploaded Photo", use_container_width=True)
+```
+
+## Image Processing with Snowflake Stages
+When processing images for AI analysis:
+
+1. **Use PIL Image objects** - Both camera_input and file_uploader return compatible formats
+2. **Save temporarily before uploading** to Snowflake stage
+3. **Always clean up** temporary files and stage files after processing
+4. **Use unique filenames** with UUID to avoid conflicts
+
+```python
+import uuid
+import tempfile
+import os
+
+# Create unique filename
+photo_id = str(uuid.uuid4())[:8]
+filename = f"analysis_photo_{photo_id}.jpg"
+
+# Save PIL Image temporarily
+with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp_file:
+    image.save(tmp_file.name, 'JPEG')
+    temp_path = tmp_file.name
+
+try:
+    # Upload to existing stage (created by setup.sql)
+    session.file.put(temp_path, f"@photo_analysis_stage/{filename}", auto_compress=False, overwrite=True)
+    
+    # Process with AI_CLASSIFY or other Cortex functions
+    result = session.sql(f"""
+    SELECT AI_CLASSIFY(TO_FILE('@photo_analysis_stage/{filename}'), ['option1', 'option2']) as analysis
+    """).collect()
+    
+finally:
+    # Always clean up
+    try:
+        os.unlink(temp_path)
+        session.sql(f"REMOVE '@photo_analysis_stage/{filename}'").collect()
+    except:
+        pass  # Ignore cleanup errors
+```
+
+## Error Handling for Booth/Demo Apps
+Always provide fallback modes for reliable operation:
+
+```python
+try:
+    # Attempt AI processing
+    result = process_with_ai(image)
+except Exception as e:
+    st.warning("🤖 Using fallback mode for reliable experience...")
+    # Provide demo fallback with predefined options
+    result = fallback_processing()
+```
+
+## Modern Streamlit Parameters
+- Use `use_container_width=True` instead of deprecated `use_column_width=True`
+- Use `type="primary"` for main action buttons
+- Use `help` parameter for user guidance tooltips

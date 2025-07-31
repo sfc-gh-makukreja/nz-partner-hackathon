@@ -1,0 +1,23 @@
+REVISIONS_TO_PREVIOUSLY_PUBLISHED_DATA,UNNAMED:_1,UNNAMED:_2,UNNAMED:_3,UNNAMED:_4,SOURCE_SHEET,LOAD_TIMESTAMP
+Return to contents,,,,,Revisions,2025-08-01 08:34:56.219377
+"Noteable revisions and changes to series in this publication are documented in the table below, beside the release when the revision first occurred.",,,,,Revisions,2025-08-01 08:34:56.219377
+Release Quarter,Series,Fuel Type/Sector,Time periods affected,Revision note,Revisions,2025-08-01 08:34:56.219377
+ENZ 2021,Electricity generation,Wood,March 1974 - March 2021,"The Ministry reviewed its classification of energy use (covering both end-use and use for cogeneration) in the wood, pulp, and paper sectors to ensure its alignment with the International Energy Agency’s reporting framework. This resulted in the discovery that black liquor use should be classified as cogeneration use rather than end-use as it feeds into cogeneration systems as pulp mills. ",Revisions,2025-08-01 08:34:56.219377
+ENZ 2021,Electricity generation,All fuel types,March 2020 - March 2021,Revisions to data provided to the Ministry,Revisions,2025-08-01 08:34:56.219377
+ENZ 2023,Electricity consumption,"Residential, Transport",March 2017 - December 2022,Improvements to consumption estimate methodology and revisions to data provided to the Ministry.,Revisions,2025-08-01 08:34:56.219377
+ENZ 2024,Plant Type (MW) ,Solar PV ,2014 - 2023 ,Improvements made to how capacity was complied and calculated. ,Revisions,2025-08-01 08:34:56.219377
+ENZ 2024,Plant Type (MW) ,Total ,2007 - 2023 ,Methodology change to include distributed solar PV. ,Revisions,2025-08-01 08:34:56.219377
+ENZ 2024,Plant Type (MW) ,Hydro and Wind,2022 - 2023,Improvement to quality of capacity data. ,Revisions,2025-08-01 08:34:56.219377
+ENZ 2024 ,Plant Type (MW) ,Congeneration (Other) ,2002 - 2019,Improvement to quality of capacity data. ,Revisions,2025-08-01 08:34:56.219377
+EQ 2024 Q4 ,Electricity generation,Natural Gas ,March 2002 - December 2025; September 2018 - September 2024,"Revisions to gas generation over two periods: March 2002 – December 2015 and September 2018 - September 2024. The revision in the first period is due to a correction of a data ingestion error, and the second period is due to revised data from a data provider.",Revisions,2025-08-01 08:34:56.219377
+EQ 2024 Q4 ,Electricity generation,Solar PV ,September 2013 - September 2024,Revision to solar generation due to revised data from data sources that were incoroprated with this release. ,Revisions,2025-08-01 08:34:56.219377
+EQ 2025 Q1,Electricity generation,Hydro,June 2002 - December 2024,"Revisions due to a correction of a data ingestion error, additional data provided to the Ministry and due to standard annual updates.",Revisions,2025-08-01 08:34:56.219377
+EQ 2025 Q1,Electricity generation,Wind,September 2016 - December 2024,"Revisions due to a correction of a data ingestion error, additional data provided to the Ministry and due to standard annual updates.",Revisions,2025-08-01 08:34:56.219377
+EQ 2025 Q1,Electricity generation,Solar PV ,March 2023 - December 2024,Improved data inputs for estimation method. ,Revisions,2025-08-01 08:34:56.219377
+EQ 2025 Q1,Electricity generation,Geothermal ,June 2022 - December 2024,Revisions due to additional data provided to the Ministry and due to standard annual updates.,Revisions,2025-08-01 08:34:56.219377
+EQ 2025 Q1,Electricity generation,Oil,June 2007 - December 2024,Revisions due to additional data provided to the Ministry and due to standard annual updates.,Revisions,2025-08-01 08:34:56.219377
+EQ 2025 Q1,Electricity generation,Gas,June 2018 - December 2024,Revisions due to additional data provided to the Ministry and due to standard annual updates.,Revisions,2025-08-01 08:34:56.219377
+EQ 2025 Q1,Electricity generation,Biogas,March 2016 - March 2017; June 2021 - December 2024,"Revisions due to a correction of a data ingestion error, additional data provided to the Ministry and due to standard annual updates.",Revisions,2025-08-01 08:34:56.219377
+EQ 2025 Q1,Electricity generation,Waste Heat,June 2024 - December 2024,Revisions due to standard annual updates. ,Revisions,2025-08-01 08:34:56.219377
+EQ 2025 Q1,Electricity generation,Wood,June 2023 - December 2024,Revisions due to additional data provided to the Ministry and due to standard annual updates.,Revisions,2025-08-01 08:34:56.219377
+EQ 2025 Q1,Electricity consumption,"Residential, Commercial, Industrial, Agriculture, Forestry, and Fishing",March 2023 - December 2024,Revisions due to improved data inputs for estimation method and revised data provided to the Ministry.,Revisions,2025-08-01 08:34:56.219377

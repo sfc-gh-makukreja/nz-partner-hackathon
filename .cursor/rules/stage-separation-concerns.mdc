@@ -1,0 +1,95 @@
+---
+description: Stage management and separation of concerns for Snowflake applications
+globs: "setup.sql,**/setup.sql,streamlit_app.py,*streamlit*.py"
+---
+
+# Stage Management & Separation of Concerns
+
+## Infrastructure vs Application Logic
+**NEVER** create infrastructure (stages, tables, views) in application code. Always separate concerns:
+
+### ✅ setup.sql (Infrastructure Layer)
+```sql
+-- Create all infrastructure components
+CREATE TABLE IF NOT EXISTS app_data (...);
+
+CREATE STAGE IF NOT EXISTS processing_stage
+    ENCRYPTION = (TYPE = 'SNOWFLAKE_SSE')
+    COMMENT = 'Stage for application file processing';
+
+CREATE OR REPLACE VIEW analytics_view AS (...);
+```
+
+### ✅ streamlit_app.py (Application Layer)  
+```python
+def process_file(image_data):
+    """Process file using existing infrastructure
+    
+    Prerequisites:
+    - processing_stage must exist (created by setup.sql)
+    - Required tables must be populated
+    """
+    session = get_snowflake_session()
+    
+    # Use existing stage (do NOT create here)
+    session.file.put(temp_path, f"@processing_stage/{filename}", ...)
+```
+
+## Stage Naming Conventions
+- Use descriptive names: `photo_analysis_stage`, `document_processing_stage`
+- Include purpose in name: `temp_analysis_stage`, `ml_training_stage`
+- Add encryption by default: `ENCRYPTION = (TYPE = 'SNOWFLAKE_SSE')`
+- Include meaningful comments for documentation
+
+## File Management Best Practices
+1. **Generate unique filenames** using UUID to prevent conflicts
+2. **Upload with overwrite** to handle retries: `overwrite=True`
+3. **Always clean up** temporary files and stage files
+4. **Use try/finally blocks** to ensure cleanup happens
+
+```sql
+-- In setup.sql - Create stage once
+CREATE STAGE IF NOT EXISTS photo_analysis_stage
+    ENCRYPTION = (TYPE = 'SNOWFLAKE_SSE')
+    COMMENT = 'Stage for AI photo analysis with automatic cleanup';
+```
+
+```python
+# In app code - Use existing stage
+try:
+    session.file.put(temp_path, f"@photo_analysis_stage/{filename}", 
+                    auto_compress=False, overwrite=True)
+    result = process_file_in_stage(filename)
+finally:
+    cleanup_files(temp_path, stage_path)
+```
+
+## Deployment Architecture
+- **setup.sql**: Run once during deployment to create infrastructure
+- **streamlit_app.py**: Contains only business logic and UI
+- **deploy.sh**: Orchestrates setup.sql → app deployment
+- **environment.yml**: App dependencies only (no infrastructure)
+
+## Error Handling Pattern
+Application should gracefully handle missing infrastructure:
+
+```python
+def check_prerequisites():
+    """Verify infrastructure exists before app starts"""
+    try:
+        # Check if required stage exists
+        result = session.sql("SHOW STAGES LIKE 'PHOTO_ANALYSIS_STAGE'").collect()
+        if not result:
+            st.error("Infrastructure not ready. Run setup.sql first.")
+            return False
+        return True
+    except Exception as e:
+        st.error(f"Infrastructure check failed: {e}")
+        return False
+```
+
+This separation ensures:
+- **Maintainability**: Infrastructure changes don't affect app logic
+- **Reliability**: App doesn't fail on repeated deployments
+- **Security**: Proper encryption and access controls
+- **Clarity**: Clear responsibility boundaries

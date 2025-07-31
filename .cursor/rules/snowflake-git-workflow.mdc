@@ -1,0 +1,220 @@
+---
+globs: *.sql,*.sh,*.yml,*.yaml
+description: Git-based development workflow patterns for Snowflake projects
+---
+
+# Snowflake Git-Based Development Workflow
+
+## Project Structure Pattern
+
+```
+project-root/
+├── setup.sql              # Infrastructure & Git integration
+├── deploy.sh              # Deployment orchestration  
+├── streamlit_app.py       # Application logic
+├── environment.yml        # Python dependencies
+├── pages/                 # Additional Streamlit pages
+│   └── admin_dashboard.py
+└── .cursor/rules/         # Development guidelines
+```
+
+## Development Workflow
+
+### 1. Feature Development
+```bash
+# Create feature branch
+git checkout -b feature/new-feature
+
+# Develop and test locally
+# Commit changes
+git add .
+git commit -m "feat: implement new feature"
+
+# Push feature branch
+git push origin feature/new-feature
+```
+
+### 2. Feature Testing in Snowflake
+```sql
+-- Test deployment from feature branch
+CREATE STREAMLIT app_name_test
+  FROM @repo_name/branches/feature/new-feature/
+  MAIN_FILE = 'streamlit_app.py'
+  QUERY_WAREHOUSE = COMPUTE_WH;
+```
+
+### 3. Production Deployment
+```bash
+# Merge to main
+git checkout main
+git merge feature/new-feature
+git push origin main
+
+# Deploy via Git integration
+./deploy.sh
+```
+
+## File Responsibilities
+
+### setup.sql
+- Database schema creation
+- Git repository configuration
+- API integration setup
+- Streamlit app creation from Git
+- Initial data population
+
+**Pattern**:
+```sql
+-- Prerequisites (manual setup required)
+-- CREATE API INTEGRATION git_api_integration...
+-- CREATE SECRET git_creds...
+
+-- Git repository setup
+CREATE OR REPLACE GIT REPOSITORY repo_name
+  API_INTEGRATION = git_api_integration
+  GIT_CREDENTIALS = git_creds
+  ORIGIN = 'https://github.com/org/repo.git';
+
+-- Application deployment
+CREATE OR REPLACE STREAMLIT app_name
+  FROM @repo_name/branches/main/
+  MAIN_FILE = 'streamlit_app.py';
+```
+
+### deploy.sh
+- Connection validation
+- Infrastructure deployment
+- Health checks
+- Error handling and rollback
+
+**Pattern**:
+```bash
+#!/bin/bash
+set -e
+
+echo "🚀 Starting deployment..."
+snow sql -f setup.sql --connection default
+echo "✅ Deployment successful!"
+```
+
+### environment.yml
+- Snowflake Anaconda Channel only
+- No pip dependencies
+- Version pinning optional
+
+**Pattern**:
+```yaml
+name: app-name
+channels:
+  - snowflake
+dependencies:
+  - streamlit
+  - pandas
+  - snowflake-snowpark-python
+```
+
+## Git Integration Best Practices
+
+### Branch Strategy
+- `main` → Production deployments
+- `develop` → Integration testing
+- `feature/*` → Feature development
+- Use descriptive branch names
+
+### Commit Conventions
+Follow [git-commit-messages](mdc:.cursor/rules/git-commit-messages.mdc):
+- `feat:` for new features
+- `fix:` for bug fixes
+- `docs:` for documentation
+- `refactor:` for code restructuring
+
+### Security
+- Store credentials in Snowflake secrets
+- Use API integrations for Git access
+- Never commit sensitive data
+- Rotate tokens regularly
+
+## Deployment Patterns
+
+### Single Environment
+```sql
+CREATE STREAMLIT app_name
+  FROM @repo_name/branches/main/
+  MAIN_FILE = 'streamlit_app.py';
+```
+
+### Multi-Environment
+```sql
+-- Development
+CREATE STREAMLIT app_name_dev
+  FROM @repo_name/branches/develop/
+  
+-- Staging  
+CREATE STREAMLIT app_name_staging
+  FROM @repo_name/branches/release/v1.0/
+  
+-- Production
+CREATE STREAMLIT app_name_prod
+  FROM @repo_name/branches/main/
+```
+
+### Blue-Green Deployment
+```sql
+-- Deploy new version
+CREATE STREAMLIT app_name_blue
+  FROM @repo_name/branches/main/;
+
+-- Test and validate
+-- Switch traffic
+ALTER STREAMLIT app_name_green RENAME TO app_name_old;
+ALTER STREAMLIT app_name_blue RENAME TO app_name;
+```
+
+## Monitoring and Maintenance
+
+### Health Monitoring
+```sql
+-- Check Git repository status
+SELECT SYSTEM$GIT_REPOSITORY_VALIDATE('repo_name');
+
+-- Monitor app performance
+SELECT * FROM SNOWFLAKE.ACCOUNT_USAGE.STREAMLIT_EVENTS
+WHERE STREAMLIT_NAME = 'app_name'
+  AND TIMESTAMP > CURRENT_TIMESTAMP() - INTERVAL '1 hour';
+```
+
+### Automated Validation
+```bash
+# In deploy.sh
+validate_deployment() {
+  if ! snow sql -q "SHOW STREAMLITS LIKE 'app_name';" | grep -q "app_name"; then
+    echo "❌ Deployment validation failed"
+    exit 1
+  fi
+  echo "✅ Deployment validated"
+}
+```
+
+## Error Recovery
+
+### Common Issues
+- Branch not found → Switch to `main` branch
+- Authentication failure → Refresh Git credentials  
+- Sync issues → Force repository fetch
+- App errors → Check [streamlit_app.py](mdc:streamlit_app.py) logs
+
+### Rollback Procedure
+```sql
+-- Quick rollback to previous version
+CREATE OR REPLACE STREAMLIT app_name
+  FROM @repo_name/commits/previous-working-commit/
+  MAIN_FILE = 'streamlit_app.py';
+```
+
+## Integration with Existing Rules
+
+This workflow integrates with:
+- [snowflake-development](mdc:.cursor/rules/snowflake-development.mdc) for database best practices
+- [stage-separation-concerns](mdc:.cursor/rules/stage-separation-concerns.mdc) for architecture
+- [streamlit-camera-input](mdc:.cursor/rules/streamlit-camera-input.mdc) for app features
+- [snowflake-ai-image-processing](mdc:.cursor/rules/snowflake-ai-image-processing.mdc) for AI capabilities

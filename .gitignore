@@ -1,0 +1,32 @@
+# Temporary Excel files
+~$*.xlsx
+~$*.xls
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary processing files (keep final versions only)
+processed_data/*_fixed.csv
+processed_data/*_final.csv
+processed_data/*_reordered.csv

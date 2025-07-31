@@ -1,0 +1,192 @@
+---
+description: Troubleshooting Snowflake Git integration issues and common fixes
+---
+
+# Snowflake Git Integration Troubleshooting
+
+## Common Errors and Solutions
+
+### Branch Not Found Error
+**Error**: `Failed to access the Git Repository. Requested branch doesnt exist.`
+
+**Solutions**:
+```sql
+-- 1. Check available branches
+SHOW GIT BRANCHES IN GIT REPOSITORY repo_name;
+
+-- 2. Use main branch instead of feature branch
+CREATE STREAMLIT app_name
+  FROM @repo_name/branches/main/  -- Changed from feature branch
+  MAIN_FILE = 'streamlit_app.py';
+
+-- 3. Fetch latest branches
+ALTER GIT REPOSITORY repo_name FETCH;
+```
+
+### Authentication Issues
+**Error**: `Authentication failed` or `Access denied`
+
+**Solutions**:
+```sql
+-- 1. Verify API integration
+SHOW API INTEGRATIONS LIKE 'git_api_integration';
+
+-- 2. Test secret access
+SELECT SYSTEM$GET_USERNAME_FROM_SECRET('git_creds');
+
+-- 3. Recreate credentials with fresh token
+CREATE OR REPLACE SECRET git_creds
+  TYPE = password
+  USERNAME = 'github-username'
+  PASSWORD = 'new-github-token';
+```
+
+### Repository Sync Issues
+**Error**: Repository not updating with latest changes
+
+**Solutions**:
+```sql
+-- Force refresh repository
+ALTER GIT REPOSITORY repo_name FETCH;
+
+-- Check last sync time
+SELECT SYSTEM$GIT_REPOSITORY_VALIDATE('repo_name');
+
+-- Recreate repository connection
+DROP GIT REPOSITORY repo_name;
+CREATE GIT REPOSITORY repo_name
+  API_INTEGRATION = git_api_integration
+  GIT_CREDENTIALS = git_creds
+  ORIGIN = 'https://github.com/org/repo.git';
+```
+
+## Diagnostic Commands
+
+### Repository Status
+```sql
+-- Show all Git repositories
+SHOW GIT REPOSITORIES;
+
+-- Get repository details
+DESCRIBE GIT REPOSITORY repo_name;
+
+-- List available branches
+SHOW GIT BRANCHES IN GIT REPOSITORY repo_name;
+
+-- List repository files
+LIST @repo_name/branches/main/;
+```
+
+### Streamlit Debugging
+```sql
+-- Show Streamlit apps
+SHOW STREAMLITS;
+
+-- Get app details
+DESCRIBE STREAMLIT app_name;
+
+-- Check app logs
+SELECT * FROM TABLE(INFORMATION_SCHEMA.STREAMLIT_EVENT_HISTORY(
+  STREAMLIT_NAME => 'app_name'
+));
+```
+
+### Connection Testing
+```sql
+-- Test API integration
+SELECT SYSTEM$TEST_API_INTEGRATION('git_api_integration');
+
+-- Validate Git repository
+SELECT SYSTEM$GIT_REPOSITORY_VALIDATE('repo_name');
+
+-- Check warehouse permissions
+SHOW GRANTS ON WAREHOUSE compute_wh;
+```
+
+## Performance Optimization
+
+### Large Repository Handling
+```sql
+-- Use shallow clone for faster sync
+CREATE GIT REPOSITORY repo_name
+  API_INTEGRATION = git_api_integration
+  GIT_CREDENTIALS = git_creds
+  ORIGIN = 'https://github.com/org/repo.git'
+  SHALLOW_CLONE = TRUE;  -- Faster for large repos
+```
+
+### Branch Management
+```sql
+-- Clean up old branches periodically
+ALTER GIT REPOSITORY repo_name FETCH;
+-- Manual cleanup of unused branches in GitHub
+
+-- Use specific commit for stability
+CREATE STREAMLIT app_name
+  FROM @repo_name/commits/abc123def456/
+  MAIN_FILE = 'streamlit_app.py';
+```
+
+## Security Troubleshooting
+
+### Permission Issues
+```sql
+-- Grant necessary privileges
+GRANT USAGE ON GIT REPOSITORY repo_name TO ROLE app_role;
+GRANT USAGE ON WAREHOUSE compute_wh TO ROLE app_role;
+GRANT USAGE ON DATABASE db_name TO ROLE app_role;
+```
+
+### Token Rotation
+```bash
+# 1. Generate new GitHub Personal Access Token
+# 2. Update Snowflake secret
+snow sql -q "
+CREATE OR REPLACE SECRET git_creds
+  TYPE = password
+  USERNAME = 'username'
+  PASSWORD = 'new-token';"
+
+# 3. Test connection
+snow sql -q "SELECT SYSTEM$GIT_REPOSITORY_VALIDATE('repo_name');"
+```
+
+## Best Practices for Prevention
+
+### Repository Setup
+- Always test with public repository first
+- Use consistent naming conventions
+- Set up monitoring for repository sync failures
+- Document branch strategy and deployment process
+
+### Error Monitoring
+```sql
+-- Create view for Git errors
+CREATE VIEW git_error_log AS
+SELECT *
+FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+WHERE QUERY_TEXT ILIKE '%git repository%'
+  AND ERROR_CODE IS NOT NULL;
+```
+
+### Automated Health Checks
+```bash
+#!/bin/bash
+# health_check.sh
+
+check_git_repo() {
+  if ! snow sql -q "SELECT SYSTEM\$GIT_REPOSITORY_VALIDATE('$1');" | grep -q "true"; then
+    echo "❌ Git repository $1 validation failed"
+    return 1
+  fi
+  echo "✅ Git repository $1 is healthy"
+}
+
+check_streamlit_app() {
+  if ! snow sql -q "SHOW STREAMLITS LIKE '$1';" | grep -q "$1"; then
+    echo "❌ Streamlit app $1 not found"
+    return 1
+  fi
+  echo "✅ Streamlit app $1 exists"
+}
+```

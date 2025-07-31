@@ -1,0 +1,56 @@
+---
+globs: streamlit_app.py,environment.yml,snowflake.yml
+description: Snowflake Streamlit development best practices
+---
+
+# Snowflake Streamlit Development Rules
+
+## Environment Configuration
+
+### environment.yml Best Practices
+- **NEVER use pip packages** in environment.yml for Streamlit in Snowflake
+- Only use packages from the **Snowflake Anaconda Channel**
+- Always include required structure:
+  ```yaml
+  name: sf_env
+  channels:
+    - snowflake
+  dependencies:
+    - streamlit>=1.28.0
+    - pandas>=1.5.0
+    - pillow>=9.0.0
+    # Add other packages from Snowflake channel only
+  ```
+
+### snowflake.yml Configuration
+- **Always use definition_version: 2** for CLI v3.10.0+
+- Use **entities** structure (not direct streamlit config):
+  ```yaml
+  definition_version: 2
+  entities:
+    app_name:
+      type: streamlit
+      identifier: app_name
+      stage: app_stage
+      query_warehouse: WAREHOUSE_NAME
+      title: "App Title"
+      main_file: streamlit_app.py
+      artifacts:
+        - streamlit_app.py
+        - environment.yml
+  ```
+
+## Snowflake CLI Connection
+- **Always use default connection**: `--connection default`
+- Test connection before deployment: `snow connection test --connection default`
+- Deploy command: `snow streamlit deploy --connection default`
+
+## Cortex AISQL Integration
+- Use `st.connection("snowflake").session()` for Snowflake session
+- Cortex functions: `SNOWFLAKE.CORTEX.COMPLETE()`, `AI_CLASSIFY()`, `AI_FILTER()`
+- Always include error handling for AI functions with fallback options
+
+## Database Best Practices
+- Create tables with `CREATE TABLE IF NOT EXISTS`
+- Use VARIANT data type for flexible JSON storage
+- Include session tracking and analytics tables for booth/demo apps

@@ -1,0 +1,61 @@
+---
+globs: *.py,*.sql,*.yml
+description: General Snowflake development best practices and patterns
+---
+
+# Snowflake Development Best Practices
+
+## Connection Management
+- **Always use named connections** with Snowflake CLI: `--connection default`
+- Test connections before deployment: `snow connection test --connection default`
+- Use `st.connection("snowflake").session()` in Streamlit apps
+- Handle connection errors gracefully with try/catch blocks
+
+## Cortex AI Functions
+### Supported Functions
+- `SNOWFLAKE.CORTEX.COMPLETE()` - Text generation and completion
+- `SNOWFLAKE.CORTEX.CLASSIFY()` - Classification tasks
+- `SNOWFLAKE.CORTEX.FILTER()` - Content filtering
+- `SNOWFLAKE.CORTEX.SIMILARITY()` - Semantic similarity
+
+### Best Practices
+- **Always include fallback logic** for AI function failures
+- **Optimize prompts** for cost-effectiveness (shorter = cheaper)
+- **Use appropriate models**: mixtral-8x7b for general tasks
+- **Include token limits** in COMPLETE functions (e.g., 100-500 tokens)
+- **Sanitize inputs** before passing to AI functions
+
+## Database Design
+### Tables
+- Use `CREATE TABLE IF NOT EXISTS` for idempotent operations
+- Include `TIMESTAMP` columns for tracking (created_at, updated_at)
+- Use `VARIANT` data type for flexible JSON storage
+- Add proper primary keys and indexes
+
+### Data Types
+- `STRING` for text (preferred over VARCHAR)
+- `VARIANT` for JSON/object data
+- `TIMESTAMP` for datetime values
+- `NUMBER` for numeric values
+
+## Error Handling
+```python
+try:
+    result = session.sql("SELECT SNOWFLAKE.CORTEX.COMPLETE(...)").collect()
+    return result[0]['RESPONSE']
+except Exception as e:
+    st.error(f"AI function failed: {e}")
+    return fallback_response
+```
+
+## Performance Optimization
+- **Use appropriate warehouses** for workload size
+- **Implement caching** for repeated AI calls
+- **Batch operations** when possible
+- **Monitor compute costs** especially for AI functions
+
+## Security
+- **Never expose credentials** in code
+- **Use stages** for file uploads in production
+- **Implement proper role-based access** (RBAC)
+- **Validate user inputs** before database operations

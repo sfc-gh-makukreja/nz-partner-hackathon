@@ -1,0 +1,132 @@
+---
+description: AI image processing patterns with Snowflake Cortex AISQL
+globs: "*streamlit*.py,**/*ai*.py,**/*cortex*.py"
+---
+
+# Snowflake Cortex AI Image Processing
+
+## AI_CLASSIFY Pattern for Image Analysis
+Use AI_CLASSIFY with TO_FILE() for image classification tasks:
+
+```python
+def analyze_image_with_cortex(image_path, stage_name, categories):
+    """Classify image using Snowflake Cortex AI_CLASSIFY"""
+    
+    classification_result = session.sql(f"""
+    WITH image_data AS (
+        SELECT TO_FILE('@{stage_name}/{image_path}') AS img
+    )
+    SELECT
+        AI_CLASSIFY(img, {categories}):labels[0] AS primary_classification,
+        AI_CLASSIFY(img, {categories}):labels AS all_classifications
+    FROM image_data
+    """).collect()
+    
+    return classification_result[0] if classification_result else None
+```
+
+## Multi-Category Classification
+Analyze images across multiple dimensions simultaneously:
+
+```python
+# Example: Professional style and personality analysis
+classification_result = session.sql(f"""
+WITH photo_analysis AS (
+    SELECT TO_FILE('@photo_analysis_stage/{filename}') AS img
+)
+SELECT
+    AI_CLASSIFY(img, ['professional', 'casual', 'creative', 'technical']):labels[0] AS professional_style,
+    AI_CLASSIFY(img, ['confident', 'analytical', 'innovative', 'collaborative']):labels[0] AS personality_traits,
+    AI_CLASSIFY(img, ['indoor', 'outdoor', 'studio', 'natural']):labels[0] AS setting_type
+FROM photo_analysis
+""").collect()
+```
+
+## Error Handling and Fallbacks
+Always implement robust fallback systems for production apps:
+
+```python
+def process_with_ai_fallback(image_data, categories):
+    """Process image with AI_CLASSIFY and intelligent fallbacks"""
+    try:
+        # Upload image to stage
+        filename = upload_to_stage(image_data)
+        
+        # Attempt AI classification
+        result = session.sql(f"""
+        SELECT AI_CLASSIFY(TO_FILE('@photo_analysis_stage/{filename}'), {categories}):labels[0] AS classification
+        """).collect()
+        
+        if result and result[0]['CLASSIFICATION']:
+            return result[0]['CLASSIFICATION']
+        else:
+            raise ValueError("AI_CLASSIFY returned empty result")
+            
+    except Exception as e:
+        st.warning("🤖 Using intelligent fallback mode...")
+        
+        # Implement smart fallback based on context
+        return smart_fallback_classification(categories)
+    
+    finally:
+        # Always cleanup
+        cleanup_stage_file(filename)
+```
+
+## Content Filtering with AI_FILTER
+Use AI_FILTER for content appropriateness checks:
+
+```python
+def ensure_appropriate_content(generated_text):
+    """Filter generated content for appropriateness"""
+    try:
+        filter_result = session.sql(f"""
+        SELECT AI_FILTER('{escaped_text}', 'inappropriate') AS is_appropriate
+        """).collect()
+        
+        return filter_result[0]['IS_APPROPRIATE'] if filter_result else False
+    except:
+        # Conservative fallback - assume inappropriate if filtering fails
+        return False
+```
+
+## Token Usage Tracking
+Monitor AI function usage for cost optimization:
+
+```python
+def track_ai_usage(function_name, tokens_used, processing_time):
+    """Track AI function usage for analytics"""
+    session.sql(f"""
+    INSERT INTO ai_usage_analytics VALUES (
+        CURRENT_TIMESTAMP(),
+        '{function_name}',
+        {tokens_used},
+        {processing_time},
+        '{st.session_state.session_id}'
+    )
+    """).collect()
+```
+
+## Best Practices for Booth/Demo Apps
+1. **Always provide fallbacks** - AI functions can fail or be slow
+2. **Use conservative token limits** - Keep costs predictable
+3. **Cache results when possible** - Avoid reprocessing same inputs
+4. **Show progress indicators** - AI processing takes time
+5. **Handle rate limits gracefully** - Implement retry logic
+
+```python
+# Example with progress indication
+with st.spinner("🤖 AI is analyzing your photo..."):
+    progress_bar = st.progress(0)
+    for i in range(100):
+        time.sleep(0.03)  # Simulate processing time
+        progress_bar.progress(i + 1)
+    
+    result = analyze_with_cortex(image)
+```
+
+## File Stage Optimization
+- Use **unique filenames** to prevent conflicts: `f"photo_{uuid.uuid4()[:8]}.jpg"`
+- **Always encrypt** stages: `ENCRYPTION = (TYPE = 'SNOWFLAKE_SSE')`
+- **Clean up immediately** after processing to manage storage costs
+- **Use appropriate image formats** - JPEG for photos, PNG for graphics

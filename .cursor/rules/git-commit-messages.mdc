@@ -1,0 +1,55 @@
+---
+description: useful in git commit
+---
+
+# Git Commit Message Standards
+
+## Commit Message Format
+Use clear, descriptive commit messages that explain both WHAT and WHY:
+
+```
+feat: add superhero generator with Cortex AISQL
+
+- Implement AI-powered photo analysis using Cortex functions
+- Generate personalized superhero names and powers
+- Add visitor tracking and analytics dashboard
+- Include professional booth-ready UI design
+```
+
+## Commit Types
+- **feat**: New feature
+- **fix**: Bug fix
+- **docs**: Documentation changes
+- **style**: Code style changes (formatting, etc.)
+- **refactor**: Code refactoring
+- **test**: Adding or updating tests
+- **chore**: Maintenance tasks, dependencies
+
+## Best Practices
+- **First line**: 50 characters or less, imperative mood
+- **Body**: Explain what changed and why, wrap at 72 characters
+- **Include context**: Reference issues, features, or requirements
+- **Be specific**: Instead of "fix bug" use "fix connection timeout in AI analysis"
+- **List key changes**: Use bullet points for multiple changes
+
+## Examples
+```
+feat: integrate Snowflake Cortex AISQL for superhero generation
+
+- Replace random selection with AI_COMPLETE for personalized results
+- Add AI_CLASSIFY for photo style and personality analysis
+- Implement fallback system for error handling
+- Update database schema to store AI analysis results
+
+fix: correct snowflake.yml format for CLI v3.10.0
+
+- Use entities structure instead of direct streamlit config
+- Add required type and artifacts properties
+- Update definition_version to 2 for compatibility
+
+docs: add deployment guide for Snowflake World Tour app
+
+- Include VPN connection requirements
+- Document Cortex AISQL setup process
+- Add troubleshooting steps for common issues
+```

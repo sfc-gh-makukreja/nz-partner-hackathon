@@ -1,0 +1,125 @@
+---
+description: Snowflake Git integration setup and deployment patterns
+---
+
+# Snowflake Git Integration
+
+## Prerequisites Setup
+
+### 1. API Integration
+Always create API integration for GitHub before setting up Git repositories:
+
+```sql
+CREATE OR REPLACE API INTEGRATION git_api_integration
+  API_PROVIDER = git_https_api
+  API_ALLOWED_PREFIXES = ('https://github.com/')
+  ENABLED = TRUE
+  COMMENT = 'API integration for GitHub repositories';
+```
+
+### 2. Git Credentials
+Create secret for Git authentication:
+
+```sql
+CREATE OR REPLACE SECRET git_creds
+  TYPE = password
+  USERNAME = 'your-github-username'
+  PASSWORD = 'your-github-token'  -- Personal Access Token
+  COMMENT = 'Git credentials for repository access';
+```
+
+### 3. Workspace Creation
+Create workspace for Git-based development:
+
+```sql
+CREATE OR REPLACE WAREHOUSE git_wh
+  WAREHOUSE_SIZE = 'SMALL'
+  AUTO_SUSPEND = 60
+  AUTO_RESUME = TRUE
+  COMMENT = 'Warehouse for Git integration operations';
+
+USE WAREHOUSE git_wh;
+```
+
+## Git Repository Setup
+
+### Repository Creation Pattern
+```sql
+CREATE OR REPLACE GIT REPOSITORY your_repo_name
+  API_INTEGRATION = git_api_integration
+  GIT_CREDENTIALS = git_creds
+  ORIGIN = 'https://github.com/org/repo.git'
+  COMMENT = 'Git repository for CI/CD deployment';
+```
+
+### Stage Creation for Git Files
+```sql
+CREATE STAGE IF NOT EXISTS your_stage_name
+  ENCRYPTION = (TYPE = 'SNOWFLAKE_SSE')
+  COMMENT = 'Stage for Git repository files';
+```
+
+## Streamlit Deployment from Git
+
+### Git-based Streamlit Creation
+```sql
+CREATE OR REPLACE STREAMLIT app_name
+  FROM @repo_name/branches/main/
+  MAIN_FILE = 'streamlit_app.py'
+  QUERY_WAREHOUSE = COMPUTE_WH
+  TITLE = 'Your App Title - Git CI/CD'
+  COMMENT = 'App deployed from Git repository';
+```
+
+## Best Practices
+
+### File Organization
+- Keep `setup.sql` for infrastructure
+- Use `deploy.sh` for orchestration
+- Separate app logic from database setup
+- Use [setup.sql](mdc:setup.sql) for all CREATE statements
+
+### Branch Strategy
+- Use feature branches for development
+- Deploy from `main` branch in production
+- Test deployment from feature branches first
+
+### Security
+- Always use API integration, never embed credentials
+- Use Snowflake secrets for Git authentication
+- Enable encryption on all stages
+
+### Error Handling
+- Check branch existence before deployment
+- Validate Git repository access
+- Use `IF NOT EXISTS` for idempotent setup
+
+### CI/CD Pipeline
+1. Code changes pushed to Git
+2. `deploy.sh` triggers `setup.sql`
+3. Git integration automatically syncs
+4. Streamlit redeploys from updated repository
+
+## Common Patterns
+
+### Setup Script Structure
+```bash
+#!/bin/bash
+set -e
+echo "🚀 Starting Git-based deployment..."
+echo "🔗 Deploying from Git repository..."
+echo "🗄️ Setting up infrastructure..."
+snow sql -f setup.sql --connection default
+echo "✅ Git-based deployment successful!"
+```
+
+### Multi-environment Support
+```sql
+-- Development
+CREATE STREAMLIT ${app_name}_dev
+  FROM @repo_name/branches/develop/
+  
+-- Production  
+CREATE STREAMLIT ${app_name}_prod
+  FROM @repo_name/branches/main/
+```
