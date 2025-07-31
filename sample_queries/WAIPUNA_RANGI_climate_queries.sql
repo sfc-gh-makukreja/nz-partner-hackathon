@@ -1,6 +1,9 @@
--- WAIPUNA RANGI (Rain & Water) - Sample Queries
--- Theme: Rain, Water, Climate Patterns, and Weather Analysis  
--- Data Available: NIWA climate station rainfall data (103 annual records, 1933-2022)
+-- WAIPUNA RANGI (Rain & Water) - Complete Water Risk Intelligence Platform
+-- Theme: Comprehensive water risk analysis combining climate, flood, and financial data
+-- Data Sources:
+-- • NIWA Climate Data (rainfall/temperature, 1933-2022)
+-- • Waikato Flood Zones (13 zones, current mapping)  
+-- • ICNZ Disaster Costs (141 events, 1968-2025, $1,955M water-related)
 
 USE DATABASE nz_partner_hackathon;
 USE SCHEMA WAIPUNA_RANGI;
@@ -9,14 +12,22 @@ USE SCHEMA WAIPUNA_RANGI;
 -- 1. EXPLORATORY QUERIES
 -- =============================================
 
--- Overview of available climate data
+-- Overview of all WAIPUNA_RANGI datasets
 SELECT 'Annual rainfall data' as dataset, COUNT(*) as records FROM rainfall_annual
 UNION ALL
 SELECT 'Monthly rainfall data' as dataset, COUNT(*) as records FROM rainfall_monthly
 UNION ALL  
 SELECT 'Annual temperature data' as dataset, COUNT(*) as records FROM temperature_annual
 UNION ALL
-SELECT 'Monthly temperature data' as dataset, COUNT(*) as records FROM temperature_monthly;
+SELECT 'Monthly temperature data' as dataset, COUNT(*) as records FROM temperature_monthly
+UNION ALL
+SELECT 'Flood zones' as dataset, COUNT(*) as records FROM waipa_flood_zones
+UNION ALL
+SELECT 'Flood boundaries' as dataset, COUNT(*) as records FROM waipa_flood_boundaries
+UNION ALL
+SELECT 'Disaster costs (all)' as dataset, COUNT(*) as records FROM icnz_disaster_costs
+UNION ALL
+SELECT 'Disaster costs (water-related)' as dataset, COUNT(*) as records FROM icnz_disaster_costs WHERE is_water_related = TRUE;
 
 -- Station coverage and data range
 SELECT 
@@ -341,39 +352,289 @@ GROUP BY station_id, station_name
 ORDER BY drought_risk_percent DESC;
 
 -- =============================================
--- NEXT STEPS FOR PARTICIPANTS:
+-- 5. FLOOD RISK ANALYSIS (WAIKATO REGIONAL HAZARDS PORTAL)
+-- =============================================
+
+-- Flood zone overview and risk classification
+SELECT 
+    reference,
+    feature,
+    COUNT(*) as zone_count,
+    ROUND(SUM(shape_area_sqm) / 1000000, 2) as total_area_km2,
+    ROUND(AVG(shape_area_sqm), 2) as avg_zone_size_sqm,
+    ROUND(SUM(shape_length_m) / 1000, 2) as total_perimeter_km
+FROM waipa_flood_zones
+GROUP BY reference, feature
+ORDER BY total_area_km2 DESC;
+
+-- Major flood areas by watercourse
+SELECT 
+    CASE 
+        WHEN comments LIKE '%WAIPA RIVER%' THEN 'Waipa River'
+        WHEN comments LIKE '%PUNIU RIVER%' THEN 'Puniu River'
+        WHEN comments LIKE '%MANGAPIKO%' THEN 'Mangapiko Stream'
+        WHEN comments LIKE '%FLOOD DETENTION%' THEN 'Flood Control Infrastructure'
+        WHEN comments LIKE '%SECONDARY FLOW%' THEN 'Secondary Flow Paths'
+        ELSE 'General Flood Hazard Areas'
+    END as watercourse_type,
+    COUNT(*) as zone_count,
+    ROUND(SUM(shape_area_sqm) / 1000000, 3) as total_flood_area_km2,
+    ROUND(AVG(shape_area_sqm), 0) as avg_zone_area_sqm
+FROM waipa_flood_zones
+GROUP BY watercourse_type
+ORDER BY total_flood_area_km2 DESC;
+
+-- Flood zone complexity analysis (polygon detail)
+SELECT 
+    f.reference,
+    f.comments,
+    b.geometry_type,
+    b.coordinate_count,
+    f.shape_area_sqm,
+    ROUND(f.shape_area_sqm / b.coordinate_count, 2) as area_per_coordinate,
+    CASE 
+        WHEN b.coordinate_count > 100 THEN 'Highly Complex'
+        WHEN b.coordinate_count > 50 THEN 'Complex'
+        WHEN b.coordinate_count > 20 THEN 'Moderate'
+        ELSE 'Simple'
+    END as complexity_level
+FROM waipa_flood_zones f
+JOIN waipa_flood_boundaries b ON f.fid = b.fid
+ORDER BY b.coordinate_count DESC;
+
+-- =============================================
+-- 6. DISASTER COST ANALYSIS (ICNZ DATA)
+-- =============================================
+
+-- Water-related disaster trends over time
+SELECT 
+    event_year,
+    COUNT(*) as total_events,
+    SUM(CASE WHEN is_water_related THEN 1 ELSE 0 END) as water_related_events,
+    ROUND(SUM(inflation_adjusted_cost_millions_nzd), 1) as total_cost_millions_nzd,
+    ROUND(SUM(CASE WHEN is_water_related THEN inflation_adjusted_cost_millions_nzd ELSE 0 END), 1) as water_cost_millions_nzd,
+    ROUND(100.0 * SUM(CASE WHEN is_water_related THEN inflation_adjusted_cost_millions_nzd ELSE 0 END) / SUM(inflation_adjusted_cost_millions_nzd), 1) as water_cost_percentage
+FROM icnz_disaster_costs
+WHERE event_year >= 2000  -- Focus on recent decades
+GROUP BY event_year
+ORDER BY event_year DESC;
+
+-- Major water-related disasters (top 20 costliest)
+SELECT 
+    event_date,
+    event_year,
+    event,
+    primary_category,
+    ROUND(inflation_adjusted_cost_millions_nzd, 1) as cost_millions_nzd,
+    CASE 
+        WHEN inflation_adjusted_cost_millions_nzd > 1000 THEN 'Catastrophic (>$1B)'
+        WHEN inflation_adjusted_cost_millions_nzd > 100 THEN 'Major ($100M-$1B)'
+        WHEN inflation_adjusted_cost_millions_nzd > 10 THEN 'Significant ($10M-$100M)'
+        ELSE 'Minor (<$10M)'
+    END as disaster_magnitude
+FROM icnz_disaster_costs
+WHERE is_water_related = TRUE
+ORDER BY inflation_adjusted_cost_millions_nzd DESC
+LIMIT 20;
+
+-- Disaster frequency and cost by decade
+SELECT 
+    FLOOR(event_year / 10) * 10 as decade,
+    COUNT(*) as total_disasters,
+    SUM(CASE WHEN is_water_related THEN 1 ELSE 0 END) as water_disasters,
+    ROUND(AVG(inflation_adjusted_cost_millions_nzd), 1) as avg_cost_per_event,
+    ROUND(SUM(inflation_adjusted_cost_millions_nzd), 1) as decade_total_cost,
+    ROUND(SUM(CASE WHEN is_water_related THEN inflation_adjusted_cost_millions_nzd ELSE 0 END), 1) as water_disaster_cost
+FROM icnz_disaster_costs
+WHERE event_year >= 1970
+GROUP BY decade
+ORDER BY decade;
+
+-- Seasonal disaster patterns (water-related only)
+SELECT 
+    EXTRACT(MONTH FROM event_date) as event_month,
+    MONTHNAME(event_date) as month_name,
+    COUNT(*) as disaster_count,
+    ROUND(AVG(inflation_adjusted_cost_millions_nzd), 1) as avg_cost_millions,
+    ROUND(SUM(inflation_adjusted_cost_millions_nzd), 1) as total_cost_millions,
+    CASE 
+        WHEN EXTRACT(MONTH FROM event_date) IN (12, 1, 2) THEN 'Summer'
+        WHEN EXTRACT(MONTH FROM event_date) IN (3, 4, 5) THEN 'Autumn'  
+        WHEN EXTRACT(MONTH FROM event_date) IN (6, 7, 8) THEN 'Winter'
+        WHEN EXTRACT(MONTH FROM event_date) IN (9, 10, 11) THEN 'Spring'
+    END as season
+FROM icnz_disaster_costs
+WHERE is_water_related = TRUE 
+    AND event_date IS NOT NULL
+GROUP BY event_month, month_name, season
+ORDER BY event_month;
+
+-- =============================================
+-- 7. INTEGRATED WATER RISK ANALYSIS
+-- =============================================
+
+-- Climate-disaster correlation analysis
+SELECT 
+    r.year,
+    r.station_name,
+    r.total_rainfall_mm,
+    CASE 
+        WHEN r.total_rainfall_mm > 1200 THEN 'High Rainfall Year'
+        WHEN r.total_rainfall_mm > 800 THEN 'Normal Rainfall Year'  
+        ELSE 'Low Rainfall Year'
+    END as rainfall_category,
+    d.disaster_count,
+    d.total_disaster_cost
+FROM rainfall_annual r
+LEFT JOIN (
+    SELECT 
+        event_year,
+        COUNT(*) as disaster_count,
+        SUM(inflation_adjusted_cost_millions_nzd) as total_disaster_cost
+    FROM icnz_disaster_costs
+    WHERE is_water_related = TRUE
+    GROUP BY event_year
+) d ON r.year = d.event_year
+WHERE r.year >= 2000  -- Focus on years with both datasets
+ORDER BY r.year DESC;
+
+-- Water risk summary by data source
+SELECT 
+    'Climate Patterns' as risk_factor,
+    'Historical rainfall shows high variability with drought/flood cycles' as risk_description,
+    COUNT(DISTINCT year) as years_analyzed,
+    NULL as financial_impact_millions
+FROM rainfall_annual
+WHERE total_rainfall_mm < 600 OR total_rainfall_mm > 1400  -- Extreme years
+
+UNION ALL
+
+SELECT 
+    'Flood Zones' as risk_factor,
+    'Physical flood risk mapped across ' || COUNT(*) || ' zones covering ' || 
+    ROUND(SUM(shape_area_sqm)/1000000, 1) || ' km²' as risk_description,
+    COUNT(*) as areas_at_risk,
+    NULL as financial_impact_millions
+FROM waipa_flood_zones
+
+UNION ALL
+
+SELECT 
+    'Historical Disasters' as risk_factor,
+    'Water-related disasters cost $' || ROUND(SUM(inflation_adjusted_cost_millions_nzd), 0) || 
+    'M over ' || COUNT(*) || ' events since 1968' as risk_description,
+    COUNT(*) as disaster_events,
+    ROUND(SUM(inflation_adjusted_cost_millions_nzd), 1) as financial_impact_millions
+FROM icnz_disaster_costs
+WHERE is_water_related = TRUE;
+
+-- =============================================
+-- 8. ADVANCED ANALYTICS & AI OPPORTUNITIES
+-- =============================================
+
+-- Extreme event correlation with costs
+WITH extreme_rainfall_years AS (
+    SELECT DISTINCT year
+    FROM monthly_climate_summary 
+    WHERE rainfall_category = 'Wet'
+    GROUP BY year
+    HAVING COUNT(*) >= 3  -- 3+ wet months = extreme rainfall year
+),
+disaster_costs_by_year AS (
+    SELECT 
+        event_year,
+        COUNT(*) as events,
+        SUM(inflation_adjusted_cost_millions_nzd) as total_cost
+    FROM icnz_disaster_costs 
+    WHERE is_water_related = TRUE
+    GROUP BY event_year
+)
+SELECT 
+    e.year,
+    'Extreme Rainfall Year' as event_type,
+    COALESCE(d.events, 0) as disasters_that_year,
+    COALESCE(d.total_cost, 0) as disaster_cost_millions
+FROM extreme_rainfall_years e
+LEFT JOIN disaster_costs_by_year d ON e.year = d.event_year
+ORDER BY e.year DESC;
+
+-- Predictive modeling opportunities
+SELECT 
+    'Flood Risk Modeling' as ai_opportunity,
+    'Combine rainfall patterns + flood zones + historical costs for flood prediction' as description,
+    'SNOWFLAKE.CORTEX.COMPLETE() for risk reports, SIMILARITY() for pattern matching' as cortex_functions
+
+UNION ALL
+
+SELECT 
+    'Disaster Cost Prediction' as ai_opportunity,
+    'Predict disaster costs based on weather patterns and flood zone exposure' as description,
+    'CLASSIFY() for risk levels, ML models for cost estimation' as cortex_functions
+
+UNION ALL
+
+SELECT 
+    'Water Resource Planning' as ai_opportunity,  
+    'Optimize water infrastructure using climate trends and flood mapping' as description,
+    'COMPLETE() for planning reports, spatial analysis for zone optimization' as cortex_functions;
+
+-- =============================================
+-- 9. NEXT STEPS FOR PARTICIPANTS:
 -- =============================================
 
 /*
-AI/ML PROJECT IDEAS:
+COMPREHENSIVE WATER RISK AI/ML PROJECT IDEAS:
 
-1. RAINFALL PREDICTION
-   - Predict next year's rainfall using historical patterns
-   - Use lag features and climate cycle indicators
-   - Implement drought early warning system
+🌊 FLOOD PREDICTION & EARLY WARNING
+   - Combine rainfall patterns + flood zone mapping + historical disaster costs
+   - Predict flood likelihood and estimated financial impact
+   - Real-time early warning system using weather data
+   - Use COMPLETE() for automated flood risk reports
 
-2. WATER RESOURCE OPTIMIZATION
-   - Reservoir capacity planning using rainfall variability
-   - Irrigation scheduling based on rainfall patterns
-   - Flood management system design
+💰 DISASTER COST MODELING  
+   - Predict insurance costs based on weather patterns and flood exposure
+   - Correlate extreme rainfall events with historical disaster costs
+   - Risk-based pricing models for flood insurance
+   - Use CLASSIFY() to categorize risk levels (Low/Medium/High/Extreme)
 
-3. CLIMATE CHANGE ANALYSIS
-   - Detect long-term rainfall trend changes
-   - Analyze rainfall pattern shifts over decades
-   - Project future water availability scenarios
+🗺️ SPATIAL RISK ASSESSMENT
+   - Combine flood zone boundaries with rainfall station data
+   - Create risk heat maps overlaying climate + flood + cost data
+   - Optimize flood zone updates using recent climate trends
+   - Use SIMILARITY() to find comparable risk areas
 
-4. AGRICULTURE PLANNING
-   - Crop selection based on rainfall patterns
-   - Growing season optimization
-   - Risk assessment for different farming regions
+📊 INTEGRATED WATER INTELLIGENCE PLATFORM
+   - Real-time dashboard combining all 3 data sources
+   - Climate-flood-cost correlation analysis engine
+   - Automated risk scoring for any location
+   - Use COMPLETE() for natural language risk explanations
 
-5. INFRASTRUCTURE PLANNING
-   - Storm water system capacity planning
-   - Bridge and road design flood levels
-   - Urban planning for climate resilience
+🌿 CLIMATE ADAPTATION PLANNING
+   - Infrastructure investment prioritization using integrated risk data
+   - Climate resilience planning for communities
+   - Water resource management optimization
+   - Long-term urban planning scenarios
 
-CORTEX AI INTEGRATION:
-- Use COMPLETE() for climate report generation
-- Use CLASSIFY() for drought/flood categorization
-- Use SIMILARITY() for pattern matching across years
+🚨 EMERGENCY RESPONSE OPTIMIZATION
+   - Resource allocation during extreme weather events
+   - Evacuation planning based on flood zones + weather forecasts
+   - Post-disaster cost estimation and recovery planning
+   - Use CLASSIFY() for emergency response priority levels
+
+DATA SOURCES AVAILABLE:
+✅ NIWA Climate Data: 277 annual + 4,245 monthly rainfall records (1933-2022)
+✅ Waikato Flood Zones: 13 zones with precise polygon boundaries  
+✅ ICNZ Disaster Costs: 141 events, 97 water-related ($1,955M total impact)
+
+CORTEX AI INTEGRATION OPPORTUNITIES:
+- COMPLETE() → Automated risk reports, natural language explanations
+- CLASSIFY() → Risk level categorization, disaster type classification  
+- SIMILARITY() → Pattern matching across years, comparable area analysis
+- FILTER() → Content moderation for public-facing dashboards
+
+SAMPLE HACKATHON CHALLENGES:
+1. "Predict the next major flood event and its potential cost"
+2. "Create an AI-powered flood insurance pricing model"
+3. "Build a climate resilience planning tool for local councils"
+4. "Design an early warning system combining all data sources"
 */

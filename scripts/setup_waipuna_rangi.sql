@@ -88,7 +88,54 @@ CREATE OR REPLACE TABLE temperature_monthly (
 ) COMMENT = 'Monthly temperature statistics by NIWA weather station';
 
 -- =============================================
--- 4. COMBINED CLIMATE ANALYSIS VIEWS
+-- 4. FLOOD RISK AND DISASTER COST TABLES
+-- =============================================
+
+-- Waipa District flood zones (from Waikato Regional Hazards Portal)
+CREATE OR REPLACE TABLE waipa_flood_zones (
+    fid NUMBER(10,0),
+    id NUMBER(10,0),
+    type STRING,
+    reference STRING,
+    feature STRING,
+    comments STRING,
+    shape_area_sqm NUMBER(15,3),
+    shape_length_m NUMBER(12,3),
+    data_source STRING,
+    source_url STRING,
+    load_timestamp TIMESTAMP
+) COMMENT = 'Waipa District flood zone metadata from Waikato Regional Hazards Portal';
+
+-- Flood zone boundaries (GeoJSON geometry data)
+CREATE OR REPLACE TABLE waipa_flood_boundaries (
+    fid NUMBER(10,0),
+    flood_zone_id NUMBER(10,0),
+    geometry_type STRING,
+    coordinate_count NUMBER(10,0),
+    geometry_json VARIANT,
+    data_source STRING,
+    load_timestamp TIMESTAMP
+) COMMENT = 'Waipa District flood zone polygon boundaries for spatial analysis';
+
+-- ICNZ Natural Disaster Cost Data
+CREATE OR REPLACE TABLE icnz_disaster_costs (
+    date STRING,
+    event_date DATE,
+    event_year NUMBER(4,0),
+    event STRING,
+    categories STRING,
+    primary_category STRING,
+    cost_millions_nzd NUMBER(10,2),
+    inflation_adjusted_cost_millions_nzd NUMBER(10,2),
+    is_water_related BOOLEAN,
+    more_info_available BOOLEAN,
+    data_source STRING,
+    source_url STRING,
+    load_timestamp TIMESTAMP
+) COMMENT = 'ICNZ natural disaster insurance costs (1968-2025) with focus on water-related events';
+
+-- =============================================
+-- 5. COMBINED CLIMATE ANALYSIS VIEWS
 -- =============================================
 
 -- Monthly climate summary view
@@ -205,13 +252,63 @@ CREATE OR REPLACE TABLE climate_stations (
 
 -- Insert known station data
 INSERT INTO climate_stations VALUES
-(1464, 'Historic Station 1464', 'Unknown', NULL, NULL, NULL, 1933, 1984, ['rainfall', 'temperature'], 'Historic data 1933-1984'),
-(2109, 'Primary Station 2109', 'Unknown', NULL, NULL, NULL, 1946, 1984, ['rainfall', 'temperature'], 'Primary dataset 1946-1984'),
-(4960, 'Modern Station 4960', 'Unknown', NULL, NULL, NULL, 2000, 2024, ['rainfall', 'temperature'], 'Modern data 2000+');
+(1464, 'Historic Station 1464', 'Unknown', NULL, NULL, NULL, 1933, 1984, PARSE_JSON('["rainfall", "temperature"]'), 'Historic data 1933-1984'),
+(2109, 'Primary Station 2109', 'Unknown', NULL, NULL, NULL, 1946, 1984, PARSE_JSON('["rainfall", "temperature"]'), 'Primary dataset 1946-1984'),
+(4960, 'Modern Station 4960', 'Unknown', NULL, NULL, NULL, 2000, 2024, PARSE_JSON('["rainfall", "temperature"]'), 'Modern data 2000+');
 
 -- =============================================
--- NEXT STEPS:
--- 1. Run processing script to load NIWA CSV data
--- 2. Create sample queries for climate analysis
--- 3. Build data sharing setup for participants
+-- 6. DATA LOADING COMMANDS
+-- =============================================
+
+-- Load flood and disaster cost data (run after processing script)
+PUT file://processed_data/waipa_flood_zones.csv @climate_data_stage;
+PUT file://processed_data/waipa_flood_boundaries.csv @climate_data_stage;
+PUT file://processed_data/icnz_disaster_costs.csv @climate_data_stage;
+
+-- Copy flood zones data
+COPY INTO waipa_flood_zones
+FROM @climate_data_stage/waipa_flood_zones.csv
+FILE_FORMAT = (FORMAT_NAME = niwa_csv_format);
+
+-- Copy flood boundaries data
+COPY INTO waipa_flood_boundaries
+FROM @climate_data_stage/waipa_flood_boundaries.csv
+FILE_FORMAT = (FORMAT_NAME = niwa_csv_format);
+
+-- Copy disaster costs data
+COPY INTO icnz_disaster_costs
+FROM @climate_data_stage/icnz_disaster_costs.csv
+FILE_FORMAT = (FORMAT_NAME = niwa_csv_format);
+
+-- Load existing climate data (run after processing script)
+PUT file://processed_data/rainfall_annual_combined.csv @climate_data_stage;
+PUT file://processed_data/rainfall_monthly_combined.csv @climate_data_stage;
+PUT file://processed_data/temperature_annual_combined.csv @climate_data_stage;
+PUT file://processed_data/temperature_monthly_combined.csv @climate_data_stage;
+
+-- Copy rainfall data
+COPY INTO rainfall_annual
+FROM @climate_data_stage/rainfall_annual_combined.csv
+FILE_FORMAT = (FORMAT_NAME = niwa_csv_format);
+
+COPY INTO rainfall_monthly
+FROM @climate_data_stage/rainfall_monthly_combined.csv
+FILE_FORMAT = (FORMAT_NAME = niwa_csv_format);
+
+-- Copy temperature data
+COPY INTO temperature_annual
+FROM @climate_data_stage/temperature_annual_combined.csv
+FILE_FORMAT = (FORMAT_NAME = niwa_csv_format);
+
+COPY INTO temperature_monthly
+FROM @climate_data_stage/temperature_monthly_combined.csv
+FILE_FORMAT = (FORMAT_NAME = niwa_csv_format);
+
+-- =============================================
+-- SUMMARY:
+-- Complete WAIPUNA_RANGI water risk intelligence platform with:
+-- • Historical climate data (NIWA, 1933-2022)
+-- • Flood zone mapping (Waikato Regional Hazards Portal)
+-- • Financial disaster impact (ICNZ, 1968-2025)
+-- • 97 water-related events totaling $1,955M NZD
 -- =============================================
