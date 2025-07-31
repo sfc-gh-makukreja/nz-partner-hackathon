@@ -391,11 +391,15 @@ SELECT
     b.geometry_type,
     b.coordinate_count,
     f.shape_area_sqm,
-    ROUND(f.shape_area_sqm / b.coordinate_count, 2) as area_per_coordinate,
+    CASE 
+        WHEN b.coordinate_count > 0 THEN ROUND(f.shape_area_sqm / b.coordinate_count, 2)
+        ELSE NULL 
+    END as area_per_coordinate,
     CASE 
         WHEN b.coordinate_count > 100 THEN 'Highly Complex'
         WHEN b.coordinate_count > 50 THEN 'Complex'
         WHEN b.coordinate_count > 20 THEN 'Moderate'
+        WHEN b.coordinate_count = 0 THEN 'No Coordinates'
         ELSE 'Simple'
     END as complexity_level
 FROM waipa_flood_zones f
