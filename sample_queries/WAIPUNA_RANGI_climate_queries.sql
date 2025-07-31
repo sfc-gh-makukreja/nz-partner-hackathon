@@ -558,25 +558,63 @@ FROM extreme_rainfall_years e
 LEFT JOIN disaster_costs_by_year d ON e.year = d.event_year
 ORDER BY e.year DESC;
 
--- Predictive modeling opportunities
+-- AI-Powered Risk Assessment Examples (using available Cortex AISQL functions)
+
+-- Example 1: AI_CLASSIFY disaster events by severity
 SELECT 
-    'Flood Risk Modeling' as ai_opportunity,
-    'Combine rainfall patterns + flood zones + historical costs for flood prediction' as description,
-    'SNOWFLAKE.CORTEX.COMPLETE() for risk reports, SIMILARITY() for pattern matching' as cortex_functions
+    event,
+    inflation_adjusted_cost_millions_nzd,
+    AI_CLASSIFY(event, ['Minor Incident', 'Moderate Event', 'Major Disaster', 'Catastrophic Event']) as severity_classification
+FROM icnz_disaster_costs 
+WHERE is_water_related = TRUE
+ORDER BY inflation_adjusted_cost_millions_nzd DESC
+LIMIT 10;
 
-UNION ALL
-
+-- Example 2: AI_FILTER to identify extreme weather events  
 SELECT 
-    'Disaster Cost Prediction' as ai_opportunity,
-    'Predict disaster costs based on weather patterns and flood zone exposure' as description,
-    'CLASSIFY() for risk levels, ML models for cost estimation' as cortex_functions
+    station_name,
+    year,
+    total_rainfall_mm,
+    AI_FILTER(
+        'Annual rainfall of ' || total_rainfall_mm || 'mm in ' || year, 
+        'Is this an extreme rainfall year that could cause flooding?'
+    ) as extreme_weather_flag
+FROM rainfall_annual 
+WHERE year >= 2020
+ORDER BY total_rainfall_mm DESC;
 
-UNION ALL
-
+-- Example 3: AI_AGG to summarize flood risks by region
 SELECT 
-    'Water Resource Planning' as ai_opportunity,  
-    'Optimize water infrastructure using climate trends and flood mapping' as description,
-    'COMPLETE() for planning reports, spatial analysis for zone optimization' as cortex_functions;
+    AI_AGG(
+        comments, 
+        'Summarize the main flood risks and affected waterways in this region'
+    ) as flood_risk_summary
+FROM waipa_flood_zones;
+
+-- Example 4: AI_SENTIMENT analysis of disaster event descriptions
+SELECT 
+    event,
+    event_year,
+    primary_category,
+    AI_SENTIMENT(event) as event_impact_sentiment,
+    inflation_adjusted_cost_millions_nzd
+FROM icnz_disaster_costs 
+WHERE is_water_related = TRUE 
+    AND event_year >= 2020
+ORDER BY inflation_adjusted_cost_millions_nzd DESC
+LIMIT 5;
+
+-- Example 5: AI_COMPLETE for automated flood risk reports
+SELECT 
+    AI_COMPLETE(
+        'llama3.1-70b',
+        'Create a flood risk assessment for: ' || comments || 
+        '. Area size: ' || ROUND(shape_area_sqm/1000000, 2) || ' km². ' ||
+        'Provide risk level and recommended actions.'
+    ) as automated_risk_report
+FROM waipa_flood_zones 
+WHERE comments LIKE '%RIVER%'
+LIMIT 3;
 
 -- =============================================
 -- 9. NEXT STEPS FOR PARTICIPANTS:
@@ -587,27 +625,27 @@ COMPREHENSIVE WATER RISK AI/ML PROJECT IDEAS:
 
 🌊 FLOOD PREDICTION & EARLY WARNING
    - Combine rainfall patterns + flood zone mapping + historical disaster costs
-   - Predict flood likelihood and estimated financial impact
+   - Predict flood likelihood and estimated financial impact  
    - Real-time early warning system using weather data
-   - Use COMPLETE() for automated flood risk reports
+   - Use AI_COMPLETE('llama3.1-70b', prompt) for automated flood risk reports
 
 💰 DISASTER COST MODELING  
    - Predict insurance costs based on weather patterns and flood exposure
    - Correlate extreme rainfall events with historical disaster costs
    - Risk-based pricing models for flood insurance
-   - Use CLASSIFY() to categorize risk levels (Low/Medium/High/Extreme)
+   - Use AI_CLASSIFY(event, ['Low Risk', 'Medium Risk', 'High Risk', 'Extreme Risk']) 
 
 🗺️ SPATIAL RISK ASSESSMENT
    - Combine flood zone boundaries with rainfall station data
    - Create risk heat maps overlaying climate + flood + cost data
    - Optimize flood zone updates using recent climate trends
-   - Use SIMILARITY() to find comparable risk areas
+   - Use AI_SIMILARITY(area1_description, area2_description) to find comparable risk areas
 
 📊 INTEGRATED WATER INTELLIGENCE PLATFORM
    - Real-time dashboard combining all 3 data sources
    - Climate-flood-cost correlation analysis engine
    - Automated risk scoring for any location
-   - Use COMPLETE() for natural language risk explanations
+   - Use AI_AGG(risk_factors, 'Summarize overall water risk') for comprehensive analysis
 
 🌿 CLIMATE ADAPTATION PLANNING
    - Infrastructure investment prioritization using integrated risk data
@@ -626,11 +664,19 @@ DATA SOURCES AVAILABLE:
 ✅ Waikato Flood Zones: 13 zones with precise polygon boundaries  
 ✅ ICNZ Disaster Costs: 141 events, 97 water-related ($1,955M total impact)
 
-CORTEX AI INTEGRATION OPPORTUNITIES:
-- COMPLETE() → Automated risk reports, natural language explanations
-- CLASSIFY() → Risk level categorization, disaster type classification  
-- SIMILARITY() → Pattern matching across years, comparable area analysis
-- FILTER() → Content moderation for public-facing dashboards
+CORTEX AI INTEGRATION OPPORTUNITIES (Verified Available in Asia Pacific):
+
+🎯 AVAILABLE MODELS: llama3.1-8b, llama3.1-70b, mistral-large2, mixtral-8x7b, mistral-7b
+📍 REGIONS: AWS AP Southeast 2 (Sydney), AWS AP Northeast 1 (Tokyo)
+
+- AI_COMPLETE('llama3.1-70b', prompt) → Automated risk reports, natural language explanations
+- AI_CLASSIFY(text, ['Low Risk', 'Medium Risk', 'High Risk']) → Risk level categorization  
+- AI_FILTER(text_column, 'Is this water-related?') → Filter water-related events
+- AI_SIMILARITY(text1, text2) → Pattern matching across years, comparable areas
+- AI_AGG(text_column, 'Summarize key flood risks') → Aggregate insights across events  
+- AI_SENTIMENT(event_description) → Sentiment analysis of disaster reports
+- EXTRACT_ANSWER(text, question) → Extract specific information from documents
+- TRANSLATE(text, source_lang, target_lang) → Multi-language disaster reporting
 
 SAMPLE HACKATHON CHALLENGES:
 1. "Predict the next major flood event and its potential cost"
