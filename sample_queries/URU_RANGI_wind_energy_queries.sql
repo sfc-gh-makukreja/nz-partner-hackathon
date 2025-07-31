@@ -229,18 +229,16 @@ SELECT
     ) as ai_insights
 FROM electricity_zone_data_5min;
 
--- Classify demand periods using Cortex
+-- Classify demand periods using business logic
 SELECT 
     timestamp_nz,
     nz_total_mw,
-    SNOWFLAKE.CORTEX.CLASSIFY(
-        CASE 
-            WHEN nz_total_mw > 6000 THEN 'High Demand'
-            WHEN nz_total_mw > 4500 THEN 'Medium Demand'
-            ELSE 'Low Demand'
-        END,
-        CONCAT('Time: ', timestamp_nz::STRING, ', Demand: ', nz_total_mw::STRING, ' MW')
-    ) as demand_classification
+    CASE 
+        WHEN nz_total_mw > 6000 THEN 'High Demand'
+        WHEN nz_total_mw > 4500 THEN 'Medium Demand'
+        ELSE 'Low Demand'
+    END as demand_classification,
+    CONCAT('Time: ', timestamp_nz::STRING, ', Demand: ', nz_total_mw::STRING, ' MW') as demand_description
 FROM electricity_zone_data_5min
 LIMIT 10;
 
