@@ -11,13 +11,13 @@ This repository contains production-ready datasets and sample queries for Snowfl
 | ⚡ **URU_RANGI** | ✅ **COMPLETE** | **8,465** | 5-min electricity demand, fuel mix, quarterly trends | Energy AI, grid optimization, renewable forecasting |
 | 🌊 **WAIPUNA_RANGI** | ✅ **COMPLETE** | **5,776** | Climate data (89 years), flood mapping, disaster costs | Water risk AI, flood prediction, climate adaptation |
 | 🌾 **TIPUĀNUKU** | 🔄 Pending | - | Food/agriculture data needed | Agricultural AI projects |
-| 🌊 **WAITĀ** | 🔄 Pending | - | Ocean/marine data needed | Marine AI projects |
+| 🌊 **WAITA** | ✅ **COMPLETE** | **50,822** | LINZ tide predictions (6 ports, 2024-2026) | Marine AI, navigation optimization, fishing intelligence |
 | ✈️ **HIWA_I_TE_RANGI** | 🔄 Pending | - | Travel/tourism data needed | Tourism AI projects |
 
 ### 🚀 **Ready for AI Innovation:**
-- **2 Complete Themes** with production data
-- **14,241 Total Records** across climate, energy, and financial datasets  
-- **Real Government Data** from MBIE, Transpower, NIWA, ICNZ
+- **3 Complete Themes** with production data
+- **65,063 Total Records** across climate, energy, marine, and financial datasets  
+- **Real Government Data** from MBIE, Transpower, NIWA, ICNZ, LINZ
 - **Snowflake Cortex AI** examples with verified Asia Pacific availability
 
 ## Available Themes & Data
@@ -127,7 +127,14 @@ USE SCHEMA WAIPUNA_RANGI;
 -- 5,776 records: climate data, flood mapping, disaster costs
 ```
 
-**3. Other Themes**: Sample query files will be created as datasets are added
+**3. WAITA (Ocean & Marine)**:
+```sql
+USE DATABASE nz_partner_hackathon;
+USE SCHEMA WAITA;
+-- 50,822 records: LINZ tide predictions, port metadata
+```
+
+**4. Other Themes**: Sample query files will be created as datasets are added
 
 ### **Database Access**
 
@@ -146,9 +153,14 @@ SHOW TABLES; -- electricity_zone_data_5min, electricity_generation_by_fuel, etc.
 USE SCHEMA WAIPUNA_RANGI;
 SHOW TABLES; -- rainfall_annual, waipa_flood_zones, icnz_disaster_costs, etc.
 
+-- Marine AI projects:
+USE SCHEMA WAITA;
+SHOW TABLES; -- tide_predictions, tide_ports, tidal_range_analysis, etc.
+
 -- Sample query examples:
 SELECT * FROM URU_RANGI.electricity_zone_data_5min LIMIT 10;
 SELECT * FROM WAIPUNA_RANGI.rainfall_annual WHERE year >= 2020;
+SELECT * FROM WAITA.tide_predictions WHERE date >= '2024-01-01' LIMIT 10;
 ```
 
 ## 📋 Data Sources & Attribution
