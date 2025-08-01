@@ -29,8 +29,11 @@ def parse_tide_csv(file_path: Path):
     with open(file_path, 'r', encoding='utf-8-sig') as f:
         lines = f.readlines()
     
-    # Parse header information
+    # Parse header information and clean encoding issues
     header_line = lines[0].strip()
+    # Clean BOM and encoding issues
+    header_line = header_line.replace('ï»¿', '').replace('Â°', '°')
+    
     # Extract port code, name, and coordinates using regex
     header_match = re.match(r'(\d+),([^,]+),([^,]+),([^,]+)', header_line)
     
@@ -42,14 +45,14 @@ def parse_tide_csv(file_path: Path):
     else:
         # Fallback parsing
         header_parts = header_line.split(',')
-        port_code = header_parts[0] if len(header_parts) > 0 else 'Unknown'
+        port_code = header_parts[0].replace('ï»¿', '') if len(header_parts) > 0 else 'Unknown'
         port_name = header_parts[1] if len(header_parts) > 1 else file_path.stem.split('_')[0]
-        latitude = header_parts[2] if len(header_parts) > 2 else 'Unknown'
-        longitude = header_parts[3] if len(header_parts) > 3 else 'Unknown'
+        latitude = header_parts[2].replace('Â°', '°') if len(header_parts) > 2 else 'Unknown'
+        longitude = header_parts[3].replace('Â°', '°') if len(header_parts) > 3 else 'Unknown'
     
-    # Extract reference date info
-    reference_info = lines[1].strip() if len(lines) > 1 else "Unknown reference date"
-    timezone_info = lines[2].strip() if len(lines) > 2 else "Local time, heights in metres"
+    # Extract reference date info and clean encoding
+    reference_info = lines[1].strip().replace('Â°', '°') if len(lines) > 1 else "Unknown reference date"
+    timezone_info = lines[2].strip().replace('Â°', '°') if len(lines) > 2 else "Local time, heights in metres"
     
     # Extract year from filename for metadata
     filename_parts = file_path.stem.split('_')
