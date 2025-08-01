@@ -79,8 +79,8 @@ SELECT
     tide_height_m,
     LAG(tide_time) OVER (PARTITION BY port_code, date ORDER BY tide_time) as prev_tide_time,
     DATEDIFF('minute', 
-        LAG(tide_time) OVER (PARTITION BY port_code, date ORDER BY tide_time), 
-        tide_time) as minutes_since_last_tide
+        LAG(TRY_TO_TIME(tide_time)) OVER (PARTITION BY port_code, date ORDER BY tide_time), 
+        TRY_TO_TIME(tide_time)) as minutes_since_last_tide
 FROM tide_predictions 
 WHERE tide_height_m > 2.5
   AND date BETWEEN '2024-01-01' AND '2024-01-31'
@@ -92,8 +92,8 @@ SELECT
     date,
     tide_time as high_tide_time,
     tide_height_m,
-    DATEADD('hour', -2, TIME(tide_time)) as fishing_window_start,
-    DATEADD('hour', 2, TIME(tide_time)) as fishing_window_end,
+    DATEADD('hour', -2, TRY_TO_TIME(tide_time)) as fishing_window_start,
+    DATEADD('hour', 2, TRY_TO_TIME(tide_time)) as fishing_window_end,
     CASE 
         WHEN EXTRACT(HOUR FROM TRY_TO_TIME(tide_time)) BETWEEN 5 AND 8 THEN 'Morning Prime Time'
         WHEN EXTRACT(HOUR FROM TRY_TO_TIME(tide_time)) BETWEEN 17 AND 20 THEN 'Evening Prime Time'
