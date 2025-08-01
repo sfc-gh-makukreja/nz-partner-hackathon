@@ -11,13 +11,13 @@ This repository contains production-ready datasets and sample queries for Snowfl
 | ⚡ **URU_RANGI** | ✅ **COMPLETE** | **8,465** | 5-min electricity demand, fuel mix, quarterly trends | Energy AI, grid optimization, renewable forecasting |
 | 🌊 **WAIPUNA_RANGI** | ✅ **COMPLETE** | **5,776** | Climate data (89 years), flood mapping, disaster costs | Water risk AI, flood prediction, climate adaptation |
 | 🌾 **TIPUĀNUKU** | 🔄 Pending | - | Food/agriculture data needed | Agricultural AI projects |
-| 🌊 **WAITA** | ✅ **COMPLETE** | **50,822** | LINZ tide predictions (6 ports, 2024-2026) | Marine AI, navigation optimization, fishing intelligence |
+| 🌊 **WAITA** | ✅ **COMPLETE** | **31,314** | LINZ tide predictions + Maritime NZ incidents (2018-2024) | Marine AI, safety analytics, navigation optimization |
 | ✈️ **HIWA_I_TE_RANGI** | 🔄 Pending | - | Travel/tourism data needed | Tourism AI projects |
 
 ### 🚀 **Ready for AI Innovation:**
 - **3 Complete Themes** with production data
-- **65,063 Total Records** across climate, energy, marine, and financial datasets  
-- **Real Government Data** from MBIE, Transpower, NIWA, ICNZ, LINZ
+- **45,158 Total Records** across climate, energy, marine safety, and financial datasets  
+- **Real Government Data** from MBIE, Transpower, NIWA, ICNZ, LINZ, Maritime NZ
 - **Snowflake Cortex AI** examples with verified Asia Pacific availability
 
 ## Available Themes & Data

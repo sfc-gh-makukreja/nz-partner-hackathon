@@ -340,7 +340,181 @@ SELECT
 FROM tide_ports;
 
 -- =============================================
--- 9. EXPORT QUERIES FOR EXTERNAL TOOLS
+-- 9. MARITIME SAFETY & INCIDENT ANALYSIS
+-- =============================================
+
+-- Maritime incidents overview by severity and region
+SELECT 
+    incident_severity,
+    nz_region,
+    COUNT(*) as total_incidents,
+    SUM(injured_persons) as total_injuries,
+    ROUND(AVG(injured_persons), 2) as avg_injuries_per_incident,
+    COUNT(CASE WHEN injured_persons > 0 THEN 1 END) as incidents_with_injuries
+FROM maritime_incidents
+GROUP BY incident_severity, nz_region
+ORDER BY total_incidents DESC;
+
+-- Critical incidents analysis (fatalities and founderings)
+SELECT 
+    event_date,
+    event_location,
+    nz_region,
+    what_happened,
+    vessel_type,
+    sector,
+    injured_persons,
+    brief_description
+FROM maritime_incidents
+WHERE incident_severity = 'Critical'
+ORDER BY event_date DESC
+LIMIT 20;
+
+-- Seasonal incident patterns
+SELECT 
+    event_year,
+    event_quarter,
+    CASE event_quarter
+        WHEN 1 THEN 'Q1 (Summer)'
+        WHEN 2 THEN 'Q2 (Autumn)'
+        WHEN 3 THEN 'Q3 (Winter)'
+        WHEN 4 THEN 'Q4 (Spring)'
+    END as season,
+    COUNT(*) as total_incidents,
+    COUNT(CASE WHEN incident_severity = 'Critical' THEN 1 END) as critical_incidents,
+    AVG(injured_persons) as avg_injuries_per_incident
+FROM maritime_incidents
+WHERE event_year >= 2020
+GROUP BY event_year, event_quarter
+ORDER BY event_year, event_quarter;
+
+-- Port safety analysis - incidents near major ports
+SELECT 
+    p.port_name,
+    COUNT(m.event_id) as nearby_incidents,
+    COUNT(CASE WHEN m.incident_severity = 'Critical' THEN 1 END) as critical_incidents_nearby,
+    SUM(m.injured_persons) as total_injuries_nearby,
+    ROUND(AVG(ST_DISTANCE(p.location_point, m.location_point) / 1000), 2) as avg_distance_from_port_km
+FROM tide_ports p
+LEFT JOIN maritime_incidents m ON ST_DWITHIN(p.location_point, m.location_point, 50000) -- 50km radius
+WHERE m.location_point IS NOT NULL
+GROUP BY p.port_name, p.location_point
+ORDER BY nearby_incidents DESC;
+
+-- Vessel age vs incident severity correlation
+SELECT 
+    CASE 
+        WHEN vessel_age_at_incident IS NULL THEN 'Unknown Age'
+        WHEN vessel_age_at_incident < 10 THEN '0-9 years'
+        WHEN vessel_age_at_incident < 20 THEN '10-19 years'
+        WHEN vessel_age_at_incident < 30 THEN '20-29 years'
+        ELSE '30+ years'
+    END as vessel_age_group,
+    incident_severity,
+    COUNT(*) as incident_count,
+    ROUND(AVG(injured_persons), 2) as avg_injuries
+FROM maritime_incidents
+WHERE vessel_age_at_incident IS NOT NULL
+GROUP BY vessel_age_group, incident_severity
+ORDER BY vessel_age_group, incident_severity;
+
+-- High-risk incident types by location
+SELECT 
+    what_happened,
+    where_happened,
+    COUNT(*) as frequency,
+    COUNT(CASE WHEN injured_persons > 0 THEN 1 END) as incidents_with_injuries,
+    SUM(injured_persons) as total_injuries,
+    ROUND((COUNT(CASE WHEN injured_persons > 0 THEN 1 END) * 100.0) / COUNT(*), 1) as injury_rate_percent
+FROM maritime_incidents
+GROUP BY what_happened, where_happened
+HAVING COUNT(*) >= 5  -- Only show incident types with 5+ occurrences
+ORDER BY injury_rate_percent DESC, total_injuries DESC;
+
+-- Recreational vs Commercial safety comparison
+SELECT 
+    sector,
+    COUNT(*) as total_incidents,
+    COUNT(CASE WHEN incident_severity = 'Critical' THEN 1 END) as critical_incidents,
+    ROUND((COUNT(CASE WHEN incident_severity = 'Critical' THEN 1 END) * 100.0) / COUNT(*), 2) as critical_rate_percent,
+    SUM(injured_persons) as total_injuries,
+    ROUND(AVG(injured_persons), 2) as avg_injuries_per_incident,
+    COUNT(CASE WHEN injured_persons > 0 THEN 1 END) as incidents_with_injuries
+FROM maritime_incidents
+GROUP BY sector
+ORDER BY critical_rate_percent DESC;
+
+-- Geospatial hotspots - incident density analysis
+WITH incident_grid AS (
+    SELECT 
+        FLOOR(latitude_decimal * 10) / 10 as lat_grid,
+        FLOOR(longitude_decimal * 10) / 10 as lng_grid,
+        COUNT(*) as incident_count,
+        COUNT(CASE WHEN incident_severity IN ('Critical', 'Major') THEN 1 END) as serious_incidents,
+        SUM(injured_persons) as total_injuries
+    FROM maritime_incidents
+    WHERE location_point IS NOT NULL
+    GROUP BY lat_grid, lng_grid
+    HAVING COUNT(*) >= 5  -- Only grid cells with 5+ incidents
+)
+SELECT 
+    lat_grid,
+    lng_grid,
+    incident_count,
+    serious_incidents,
+    total_injuries,
+    ROUND((serious_incidents * 100.0) / incident_count, 1) as serious_incident_rate_percent,
+    CASE 
+        WHEN incident_count >= 50 THEN 'High Risk Hotspot'
+        WHEN incident_count >= 20 THEN 'Moderate Risk Area'
+        ELSE 'Lower Risk Area'
+    END as risk_classification
+FROM incident_grid
+ORDER BY incident_count DESC;
+
+-- Incident trends over time with maritime safety insights
+SELECT 
+    event_year,
+    COUNT(*) as total_incidents,
+    COUNT(CASE WHEN incident_severity = 'Critical' THEN 1 END) as critical_incidents,
+    COUNT(CASE WHEN incident_severity = 'Major' THEN 1 END) as major_incidents,
+    SUM(injured_persons) as total_injuries,
+    ROUND(AVG(injured_persons), 2) as avg_injuries_per_incident,
+    COUNT(DISTINCT vessel_type) as unique_vessel_types_involved,
+    COUNT(CASE WHEN sector = 'Recreational' THEN 1 END) as recreational_incidents,
+    COUNT(CASE WHEN sector LIKE '%Commercial%' THEN 1 END) as commercial_incidents
+FROM maritime_incidents
+GROUP BY event_year
+ORDER BY event_year;
+
+-- =============================================
+-- 10. TIDE & INCIDENT CORRELATION ANALYSIS
+-- =============================================
+
+-- Incidents during extreme tide conditions
+SELECT 
+    m.event_date,
+    m.event_location,
+    m.what_happened,
+    m.incident_severity,
+    t.tide_height_m,
+    t.port_name as nearest_port,
+    ROUND(ST_DISTANCE(t.location_point, m.location_point) / 1000, 2) as distance_from_port_km,
+    CASE 
+        WHEN t.tide_height_m > 3.0 THEN 'High Tide'
+        WHEN t.tide_height_m < 0.5 THEN 'Low Tide'
+        ELSE 'Normal Tide'
+    END as tide_condition
+FROM maritime_incidents m
+JOIN tide_predictions t ON DATE(m.event_date) = t.date
+    AND ST_DWITHIN(m.location_point, t.location_point, 100000) -- 100km radius
+WHERE m.location_point IS NOT NULL
+    AND (t.tide_height_m > 3.0 OR t.tide_height_m < 0.5)  -- Extreme tides only
+ORDER BY m.event_date DESC, distance_from_port_km
+LIMIT 20;
+
+-- =============================================
+-- 11. EXPORT QUERIES FOR EXTERNAL TOOLS
 -- =============================================
 
 -- Export for marine weather integration

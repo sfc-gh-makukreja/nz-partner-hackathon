@@ -95,6 +95,37 @@ CREATE OR REPLACE TABLE tide_statistics (
     load_timestamp TIMESTAMP
 ) COMMENT = 'Statistical summary of tide heights by port and year';
 
+-- Maritime incidents and accidents from Maritime NZ
+CREATE OR REPLACE TABLE maritime_incidents (
+    event_id STRING PRIMARY KEY,
+    event_date_original STRING,
+    event_date DATE,
+    event_year NUMBER(4,0),
+    event_month NUMBER(2,0),
+    event_quarter NUMBER(1,0),
+    brief_description STRING,
+    what_happened STRING,
+    incident_severity STRING COMMENT 'Critical, Major, Moderate, Minor',
+    event_location STRING,
+    latitude_decimal FLOAT COMMENT 'Decimal degrees latitude (WGS 84)',
+    longitude_decimal FLOAT COMMENT 'Decimal degrees longitude (WGS 84)',
+    location_point GEOGRAPHY COMMENT 'Geographic point using Snowflake GEOGRAPHY type (SRID 4326)',
+    nz_region STRING,
+    where_happened STRING COMMENT 'Offshore, Inshore, In harbour, At berth, etc.',
+    sector STRING COMMENT 'Domestic Commercial, International Commercial, Recreational',
+    injured_persons NUMBER(5,0),
+    vessel_type STRING,
+    safety_system STRING,
+    country_flag STRING,
+    gross_tonnage NUMBER(10,2),
+    length_overall NUMBER(8,2),
+    year_of_build NUMBER(4,0),
+    vessel_age_at_incident NUMBER(3,0),
+    data_source STRING,
+    source_url STRING,
+    load_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP()
+) COMMENT = 'Maritime NZ accident and incident reports (2018-2024) with safety analysis and vessel details';
+
 -- =============================================
 -- 5. ANALYTICAL VIEWS
 -- =============================================
@@ -265,6 +296,32 @@ FROM (
     FROM @marine_data_stage/tide_statistics_by_port.csv.gz
 )
 FILE_FORMAT = (FORMAT_NAME = waita_csv_format);
+
+-- Load maritime incidents data (run after processing script)
+PUT file://processed_data/maritime_incidents_processed.csv @marine_data_stage;
+
+COPY INTO maritime_incidents (
+    event_id, event_date_original, event_date, event_year, event_month, event_quarter,
+    brief_description, what_happened, incident_severity, event_location,
+    latitude_decimal, longitude_decimal, nz_region, where_happened, sector,
+    injured_persons, vessel_type, safety_system, country_flag, gross_tonnage,
+    length_overall, year_of_build, vessel_age_at_incident, data_source, source_url, load_timestamp
+)
+FROM (
+    SELECT 
+        $1::STRING, $2::STRING, $3::DATE, $4::NUMBER, $5::NUMBER, $6::NUMBER,
+        $7::STRING, $8::STRING, $9::STRING, $10::STRING,
+        $11::FLOAT, $12::FLOAT, $13::STRING, $14::STRING, $15::STRING,
+        $16::NUMBER, $17::STRING, $18::STRING, $19::STRING, $20::NUMBER,
+        $21::NUMBER, $22::NUMBER, $23::NUMBER, $24::STRING, $25::STRING, $26::TIMESTAMP
+    FROM @marine_data_stage/maritime_incidents_processed.csv.gz
+)
+FILE_FORMAT = (FORMAT_NAME = waita_csv_format);
+
+-- Update location_point using GEOGRAPHY constructor for incidents
+UPDATE maritime_incidents 
+SET location_point = TO_GEOGRAPHY('POINT(' || longitude_decimal || ' ' || latitude_decimal || ')')
+WHERE latitude_decimal IS NOT NULL AND longitude_decimal IS NOT NULL;
 
 -- =============================================
 -- 7. DATA VALIDATION QUERIES
