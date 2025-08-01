@@ -44,8 +44,11 @@ COMMENT = 'Stage for ocean and marine data files (tide predictions, marine weath
 CREATE OR REPLACE TABLE tide_predictions (
     port_code STRING,
     port_name STRING,
-    latitude STRING,
-    longitude STRING,
+    latitude_dms STRING COMMENT 'Original DMS format (e.g., 36°51''S)',
+    longitude_dms STRING COMMENT 'Original DMS format (e.g., 174°46''E)',
+    latitude_decimal FLOAT COMMENT 'Decimal degrees latitude (WGS 84, negative for South)',
+    longitude_decimal FLOAT COMMENT 'Decimal degrees longitude (WGS 84, negative for West)',
+    location_point GEOGRAPHY COMMENT 'Geographic point using Snowflake GEOGRAPHY type (SRID 4326)',
     date DATE,
     day_of_week STRING,
     tide_datetime TIMESTAMP,
@@ -60,19 +63,22 @@ CREATE OR REPLACE TABLE tide_predictions (
     data_source STRING,
     source_file STRING,
     load_timestamp TIMESTAMP
-) COMMENT = 'LINZ tide predictions for major NZ ports (2024-2026) with daily tide times and heights';
+) COMMENT = 'LINZ tide predictions for major NZ ports (2024-2026) with WGS 84 coordinates and Snowflake GEOGRAPHY points';
 
 -- Port metadata table
 CREATE OR REPLACE TABLE tide_ports (
     port_code STRING PRIMARY KEY,
     port_name STRING,
-    latitude STRING,
-    longitude STRING,
+    latitude_dms STRING COMMENT 'Original DMS format (e.g., 36°51''S)',
+    longitude_dms STRING COMMENT 'Original DMS format (e.g., 174°46''E)',
+    latitude_decimal FLOAT COMMENT 'Decimal degrees latitude (WGS 84, negative for South)',
+    longitude_decimal FLOAT COMMENT 'Decimal degrees longitude (WGS 84, negative for West)', 
+    location_point GEOGRAPHY COMMENT 'Geographic point using Snowflake GEOGRAPHY type (SRID 4326)',
     reference_info STRING,
     timezone_info STRING,
     data_source STRING,
     load_timestamp TIMESTAMP
-) COMMENT = 'Metadata for major NZ ports with coordinates and reference information';
+) COMMENT = 'Metadata for major NZ ports with WGS 84 coordinates and Snowflake GEOGRAPHY points from LINZ';
 
 -- Tide statistics by port and year
 CREATE OR REPLACE TABLE tide_statistics (
@@ -157,8 +163,9 @@ ORDER BY port_name, highest_tide_m DESC;
 CREATE OR REPLACE VIEW port_tide_comparison AS
 SELECT 
     p.port_name,
-    p.latitude,
-    p.longitude,
+    p.latitude_decimal,
+    p.longitude_decimal,
+    p.location_point,
     s.year,
     s.tide_height_m_count as total_tides,
     s.tide_height_m_min as min_height_m,
@@ -185,34 +192,64 @@ PUT file://processed_data/tide_ports_metadata.csv @marine_data_stage;
 PUT file://processed_data/tide_statistics_by_port.csv @marine_data_stage;
 
 -- Load main tide predictions data
-COPY INTO tide_predictions (
-    port_code, port_name, latitude, longitude, date, day_of_week, 
-    tide_datetime, tide_time, tide_height_m, tide_sequence, 
-    year, month, day, reference_info, timezone_info, 
-    data_source, source_file, load_timestamp
-)
+-- Load tide predictions with GEOGRAPHY point creation  
+COPY INTO tide_predictions (port_code, port_name, latitude_dms, longitude_dms, latitude_decimal, longitude_decimal,
+                           date, day_of_week, tide_datetime, tide_time, tide_height_m, tide_sequence,
+                           year, month, day, reference_info, timezone_info, data_source, source_file, load_timestamp)
 FROM (
     SELECT 
-        $1::STRING, $2::STRING, $3::STRING, $4::STRING, $5::DATE, $6::STRING,
-        $7::TIMESTAMP, $8::STRING, $9::NUMBER, $10::NUMBER,
-        $11::NUMBER, $12::NUMBER, $13::NUMBER, $14::STRING, $15::STRING,
-        $16::STRING, $17::STRING, $18::TIMESTAMP
+        $1::STRING,      -- port_code
+        $2::STRING,      -- port_name
+        $3::STRING,      -- latitude_dms  
+        $4::STRING,      -- longitude_dms
+        $5::FLOAT,       -- latitude_decimal
+        $6::FLOAT,       -- longitude_decimal
+        $7::DATE,        -- date
+        $8::STRING,      -- day_of_week
+        $9::TIMESTAMP,   -- tide_datetime
+        $10::STRING,     -- tide_time
+        $11::FLOAT,      -- tide_height_m
+        $12::NUMBER,     -- tide_sequence
+        $13::NUMBER,     -- year
+        $14::NUMBER,     -- month
+        $15::NUMBER,     -- day
+        $16::STRING,     -- reference_info
+        $17::STRING,     -- timezone_info
+        $18::STRING,     -- data_source
+        $19::STRING,     -- source_file
+        $20::TIMESTAMP   -- load_timestamp
     FROM @marine_data_stage/tide_predictions_combined.csv.gz
 )
 FILE_FORMAT = (FORMAT_NAME = waita_csv_format);
 
--- Load port metadata
-COPY INTO tide_ports (
-    port_code, port_name, latitude, longitude, 
-    reference_info, timezone_info, data_source, load_timestamp
-)
+-- Update location_point using GEOGRAPHY constructor
+UPDATE tide_predictions 
+SET location_point = TO_GEOGRAPHY('POINT(' || longitude_decimal || ' ' || latitude_decimal || ')')
+WHERE latitude_decimal IS NOT NULL AND longitude_decimal IS NOT NULL;
+
+-- Load port metadata with GEOGRAPHY point creation
+COPY INTO tide_ports (port_code, port_name, latitude_dms, longitude_dms, latitude_decimal, longitude_decimal, 
+                      reference_info, timezone_info, data_source, load_timestamp)
 FROM (
     SELECT 
-        $1::STRING, $2::STRING, $3::STRING, $4::STRING,
-        $5::STRING, $6::STRING, $7::STRING, $8::TIMESTAMP
+        $1::STRING,   -- port_code
+        $2::STRING,   -- port_name  
+        $3::STRING,   -- latitude_dms
+        $4::STRING,   -- longitude_dms
+        $5::FLOAT,    -- latitude_decimal
+        $6::FLOAT,    -- longitude_decimal
+        $7::STRING,   -- reference_info
+        $8::STRING,   -- timezone_info
+        $9::STRING,   -- data_source
+        $10::TIMESTAMP -- load_timestamp
     FROM @marine_data_stage/tide_ports_metadata.csv.gz
 )
 FILE_FORMAT = (FORMAT_NAME = waita_csv_format);
+
+-- Update location_point using GEOGRAPHY constructor
+UPDATE tide_ports 
+SET location_point = TO_GEOGRAPHY('POINT(' || longitude_decimal || ' ' || latitude_decimal || ')')
+WHERE latitude_decimal IS NOT NULL AND longitude_decimal IS NOT NULL;
 
 -- Load tide statistics
 COPY INTO tide_statistics (

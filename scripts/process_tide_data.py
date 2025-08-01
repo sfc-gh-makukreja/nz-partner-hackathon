@@ -10,6 +10,37 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import logging
 
+def convert_dms_to_decimal(coord_str):
+    """
+    Convert coordinates from degree/minute/second format to decimal degrees
+    Example: "36°51'S" -> -36.85, "174°46'E" -> 174.77
+    """
+    if not coord_str or coord_str == 'Unknown':
+        return None
+    
+    # Remove any extra spaces and clean up
+    coord_str = coord_str.strip()
+    
+    # Parse degree/minute format like "36°51'S" or "174°46'E"
+    pattern = r"(\d+)°(\d+)'([NSEW])"
+    match = re.match(pattern, coord_str)
+    
+    if match:
+        degrees = int(match.group(1))
+        minutes = int(match.group(2))
+        direction = match.group(3)
+        
+        # Convert to decimal degrees
+        decimal = degrees + (minutes / 60.0)
+        
+        # Apply direction (negative for South and West)
+        if direction in ['S', 'W']:
+            decimal = -decimal
+            
+        return round(decimal, 6)  # 6 decimal places for good precision
+    
+    return None
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -40,15 +71,19 @@ def parse_tide_csv(file_path: Path):
     if header_match:
         port_code = header_match.group(1)
         port_name = header_match.group(2).strip()
-        latitude = header_match.group(3).strip()
-        longitude = header_match.group(4).strip()
+        latitude_dms = header_match.group(3).strip()
+        longitude_dms = header_match.group(4).strip()
     else:
         # Fallback parsing
         header_parts = header_line.split(',')
         port_code = header_parts[0].replace('ï»¿', '') if len(header_parts) > 0 else 'Unknown'
         port_name = header_parts[1] if len(header_parts) > 1 else file_path.stem.split('_')[0]
-        latitude = header_parts[2].replace('Â°', '°') if len(header_parts) > 2 else 'Unknown'
-        longitude = header_parts[3].replace('Â°', '°') if len(header_parts) > 3 else 'Unknown'
+        latitude_dms = header_parts[2].replace('Â°', '°') if len(header_parts) > 2 else 'Unknown'
+        longitude_dms = header_parts[3].replace('Â°', '°') if len(header_parts) > 3 else 'Unknown'
+    
+    # Convert to decimal degrees for Snowflake geospatial standards
+    latitude_decimal = convert_dms_to_decimal(latitude_dms)
+    longitude_decimal = convert_dms_to_decimal(longitude_dms)
     
     # Extract reference date info and clean encoding
     reference_info = lines[1].strip().replace('Â°', '°') if len(lines) > 1 else "Unknown reference date"
@@ -114,8 +149,10 @@ def parse_tide_csv(file_path: Path):
                                 tides_per_day.append({
                                     'port_code': port_code,
                                     'port_name': port_name,
-                                    'latitude': latitude,
-                                    'longitude': longitude,
+                                    'latitude_dms': latitude_dms,
+                                    'longitude_dms': longitude_dms,
+                                    'latitude_decimal': latitude_decimal,
+                                    'longitude_decimal': longitude_decimal,
                                     'date': date_str,
                                     'day_of_week': day_of_week,
                                     'tide_datetime': tide_datetime.strftime('%Y-%m-%d %H:%M:%S'),
@@ -168,8 +205,10 @@ def process_all_tide_files():
             port_info = {
                 'port_code': tide_data[0]['port_code'],
                 'port_name': tide_data[0]['port_name'],
-                'latitude': tide_data[0]['latitude'], 
-                'longitude': tide_data[0]['longitude'],
+                'latitude_dms': tide_data[0]['latitude_dms'], 
+                'longitude_dms': tide_data[0]['longitude_dms'],
+                'latitude_decimal': tide_data[0]['latitude_decimal'],
+                'longitude_decimal': tide_data[0]['longitude_decimal'],
                 'reference_info': tide_data[0]['reference_info'],
                 'timezone_info': tide_data[0]['timezone_info'],
                 'data_source': 'LINZ Tide Predictions',

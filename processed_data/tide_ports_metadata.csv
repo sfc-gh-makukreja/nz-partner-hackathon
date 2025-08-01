@@ -1,7 +1,7 @@
-port_code,port_name,latitude,longitude,reference_info,timezone_info,data_source,load_timestamp
-070,Auckland,36°51'S,174°46'E,"Based on constituent set with reference date:,01-Jul-2014","Local Std or Daylight Time,Tidal heights in metres.",LINZ Tide Predictions,2025-08-01 12:55:40
-028,Dunedin,45°53'S,170°30'E,"Based on constituent set with reference date:,01-Jul-2014","Local Std or Daylight Time,Tidal heights in metres.",LINZ Tide Predictions,2025-08-01 12:55:40
-107,Lyttelton,43°36'S,172°43'E,"Based on constituent set with reference date:,01-Jan-2014","Local Std or Daylight Time,Tidal heights in metres.",LINZ Tide Predictions,2025-08-01 12:55:40
-097,Napier,39°29'S,176°55'E,"Based on constituent set with reference date:,01-Jul-2014","Local Std or Daylight Time,Tidal heights in metres.",LINZ Tide Predictions,2025-08-01 12:55:40
-073,Tauranga,37°39'S,176°11'E,"Based on constituent set with reference date:,01-Jul-2014","Local Std or Daylight Time,Tidal heights in metres.",LINZ Tide Predictions,2025-08-01 12:55:40
-071,Wellington,41°17'S,174°47'E,"Based on constituent set with reference date:,01-Jul-2014","Local Std or Daylight Time,Tidal heights in metres.",LINZ Tide Predictions,2025-08-01 12:55:40
+port_code,port_name,latitude_dms,longitude_dms,latitude_decimal,longitude_decimal,reference_info,timezone_info,data_source,load_timestamp
+070,Auckland,36°51'S,174°46'E,-36.85,174.766667,"Based on constituent set with reference date:,01-Jul-2014","Local Std or Daylight Time,Tidal heights in metres.",LINZ Tide Predictions,2025-08-01 13:03:47
+028,Dunedin,45°53'S,170°30'E,-45.883333,170.5,"Based on constituent set with reference date:,01-Jul-2014","Local Std or Daylight Time,Tidal heights in metres.",LINZ Tide Predictions,2025-08-01 13:03:47
+107,Lyttelton,43°36'S,172°43'E,-43.6,172.716667,"Based on constituent set with reference date:,01-Jan-2014","Local Std or Daylight Time,Tidal heights in metres.",LINZ Tide Predictions,2025-08-01 13:03:47
+097,Napier,39°29'S,176°55'E,-39.483333,176.916667,"Based on constituent set with reference date:,01-Jul-2014","Local Std or Daylight Time,Tidal heights in metres.",LINZ Tide Predictions,2025-08-01 13:03:47
+073,Tauranga,37°39'S,176°11'E,-37.65,176.183333,"Based on constituent set with reference date:,01-Jul-2014","Local Std or Daylight Time,Tidal heights in metres.",LINZ Tide Predictions,2025-08-01 13:03:47
+071,Wellington,41°17'S,174°47'E,-41.283333,174.783333,"Based on constituent set with reference date:,01-Jul-2014","Local Std or Daylight Time,Tidal heights in metres.",LINZ Tide Predictions,2025-08-01 13:03:47

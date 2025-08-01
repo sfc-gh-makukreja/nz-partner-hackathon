@@ -11,19 +11,19 @@ USE SCHEMA WAITA;
 -- 1. DATA EXPLORATION QUERIES
 -- =============================================
 
--- Check available ports and data coverage
+-- Check available ports and data coverage with geospatial coordinates
 SELECT 
     p.port_name,
     p.port_code,
-    p.latitude,
-    p.longitude,
+    p.latitude_decimal,
+    p.longitude_decimal,
     COUNT(*) as total_predictions,
     MIN(t.date) as earliest_date,
     MAX(t.date) as latest_date,
     COUNT(DISTINCT t.date) as days_covered
 FROM tide_ports p
 LEFT JOIN tide_predictions t ON p.port_code = t.port_code
-GROUP BY p.port_name, p.port_code, p.latitude, p.longitude
+GROUP BY p.port_name, p.port_code, p.latitude_decimal, p.longitude_decimal
 ORDER BY p.port_name;
 
 -- Overview of tide data by year and port
@@ -114,12 +114,11 @@ WITH tide_percentiles AS (
         port_code,
         PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY tide_height_m) as p95_height
     FROM tide_predictions 
-    WHERE tide_type = 'High'
     GROUP BY port_code
 )
 SELECT 
     t.port_code,
-    t.prediction_date,
+    t.date,
     t.tide_time,
     t.tide_height_m,
     tp.p95_height,
@@ -127,14 +126,13 @@ SELECT
     'King Tide Event' as event_type
 FROM tide_predictions t
 JOIN tide_percentiles tp ON t.port_code = tp.port_code
-WHERE t.tide_type = 'High' 
-  AND t.tide_height_m > tp.p95_height
-ORDER BY t.port_code, t.prediction_date;
+WHERE t.tide_height_m > tp.p95_height
+ORDER BY t.port_code, t.date;
 
 -- Low tide exposure analysis (for coastal infrastructure)
 SELECT 
     port_code,
-    prediction_date,
+    date,
     tide_time,
     tide_height_m,
     CASE 
@@ -143,11 +141,11 @@ SELECT
         WHEN tide_height_m < 1.5 THEN 'Moderate Exposure'
         ELSE 'Low Exposure'
     END as exposure_level,
-    LAG(tide_height_m) OVER (PARTITION BY port_code ORDER BY prediction_date, tide_time) as prev_height,
-    LEAD(tide_height_m) OVER (PARTITION BY port_code ORDER BY prediction_date, tide_time) as next_height
+    LAG(tide_height_m) OVER (PARTITION BY port_code ORDER BY date, tide_time) as prev_height,
+    LEAD(tide_height_m) OVER (PARTITION BY port_code ORDER BY date, tide_time) as next_height
 FROM tide_predictions 
-WHERE tide_type = 'Low'
-ORDER BY port_code, prediction_date, tide_time;
+WHERE tide_height_m < 1.5  -- Focus on low tide conditions
+ORDER BY port_code, date, tide_time;
 
 -- =============================================
 -- 5. COMPARATIVE PORT ANALYSIS
@@ -157,22 +155,22 @@ ORDER BY port_code, prediction_date, tide_time;
 SELECT 
     port_code,
     COUNT(*) as total_observations,
-    ROUND(AVG(CASE WHEN tide_type = 'High' THEN tide_height_m END), 2) as avg_high_tide_m,
-    ROUND(AVG(CASE WHEN tide_type = 'Low' THEN tide_height_m END), 2) as avg_low_tide_m,
-    ROUND(AVG(CASE WHEN tide_type = 'High' THEN tide_height_m END) - 
-          AVG(CASE WHEN tide_type = 'Low' THEN tide_height_m END), 2) as avg_tidal_range_m,
+    ROUND(MIN(tide_height_m), 2) as min_tide_m,
+    ROUND(MAX(tide_height_m), 2) as max_tide_m,
+    ROUND(AVG(tide_height_m), 2) as avg_tide_m,
+    ROUND(MAX(tide_height_m) - MIN(tide_height_m), 2) as tidal_range_m,
     ROUND(STDDEV(tide_height_m), 2) as tide_variability
 FROM tide_predictions 
 GROUP BY port_code
-ORDER BY avg_tidal_range_m DESC;
+ORDER BY tidal_range_m DESC;
 
 -- Seasonal tide comparison across ports
 SELECT 
     port_code,
     CASE 
-        WHEN EXTRACT(MONTH FROM prediction_date) IN (12, 1, 2) THEN 'Summer'
-        WHEN EXTRACT(MONTH FROM prediction_date) IN (3, 4, 5) THEN 'Autumn'
-        WHEN EXTRACT(MONTH FROM prediction_date) IN (6, 7, 8) THEN 'Winter'
+        WHEN EXTRACT(MONTH FROM tide_datetime) IN (12, 1, 2) THEN 'Summer'
+        WHEN EXTRACT(MONTH FROM tide_datetime) IN (3, 4, 5) THEN 'Autumn'
+        WHEN EXTRACT(MONTH FROM tide_datetime) IN (6, 7, 8) THEN 'Winter'
         ELSE 'Spring'
     END as season,
     ROUND(AVG(tide_height_m), 2) as avg_tide_height_m,
@@ -182,9 +180,9 @@ SELECT
 FROM tide_predictions 
 GROUP BY port_code, 
     CASE 
-        WHEN EXTRACT(MONTH FROM prediction_date) IN (12, 1, 2) THEN 'Summer'
-        WHEN EXTRACT(MONTH FROM prediction_date) IN (3, 4, 5) THEN 'Autumn'
-        WHEN EXTRACT(MONTH FROM prediction_date) IN (6, 7, 8) THEN 'Winter'
+        WHEN EXTRACT(MONTH FROM tide_datetime) IN (12, 1, 2) THEN 'Summer'
+        WHEN EXTRACT(MONTH FROM tide_datetime) IN (3, 4, 5) THEN 'Autumn'
+        WHEN EXTRACT(MONTH FROM tide_datetime) IN (6, 7, 8) THEN 'Winter'
         ELSE 'Spring'
     END
 ORDER BY port_code, season;
@@ -287,7 +285,62 @@ GROUP BY port_code, daily_total_tides,
 ORDER BY port_code, daily_total_tides DESC;
 
 -- =============================================
--- 8. EXPORT QUERIES FOR EXTERNAL TOOLS
+-- 8. GEOSPATIAL ANALYSIS QUERIES
+-- =============================================
+
+-- Port distances using Snowflake GEOGRAPHY functions
+SELECT 
+    p1.port_name as from_port,
+    p2.port_name as to_port,
+    ROUND(ST_DISTANCE(p1.location_point, p2.location_point) / 1000, 2) as distance_km
+FROM tide_ports p1
+CROSS JOIN tide_ports p2
+WHERE p1.port_name < p2.port_name  -- Avoid duplicate pairs
+ORDER BY distance_km;
+
+-- Nearest port to a specific coordinate (example: Wellington region)
+SELECT 
+    port_name,
+    latitude_decimal,
+    longitude_decimal,
+    ROUND(ST_DISTANCE(location_point, TO_GEOGRAPHY('POINT(174.78 -41.29)')) / 1000, 2) as distance_from_wellington_km
+FROM tide_ports
+ORDER BY distance_from_wellington_km;
+
+-- Coastal clustering analysis (group ports by proximity)
+SELECT 
+    port_name,
+    latitude_decimal,
+    longitude_decimal,
+    CASE 
+        WHEN latitude_decimal > -38 THEN 'North Island - Upper'
+        WHEN latitude_decimal > -42 THEN 'North Island - Lower' 
+        WHEN latitude_decimal > -44 THEN 'South Island - Upper'
+        ELSE 'South Island - Lower'
+    END as coastal_region,
+    CASE
+        WHEN longitude_decimal < 172 THEN 'West Coast'
+        WHEN longitude_decimal < 175 THEN 'Central'
+        ELSE 'East Coast'
+    END as coast_orientation
+FROM tide_ports
+ORDER BY latitude_decimal DESC;
+
+-- Geospatial bounding box for NZ ports
+SELECT 
+    'NZ Ports Coverage' as description,
+    MIN(latitude_decimal) as south_boundary,
+    MAX(latitude_decimal) as north_boundary,
+    MIN(longitude_decimal) as west_boundary,
+    MAX(longitude_decimal) as east_boundary,
+    ROUND(ST_DISTANCE(
+        TO_GEOGRAPHY('POINT(' || MIN(longitude_decimal) || ' ' || MIN(latitude_decimal) || ')'),
+        TO_GEOGRAPHY('POINT(' || MAX(longitude_decimal) || ' ' || MAX(latitude_decimal) || ')')
+    ) / 1000, 2) as diagonal_distance_km
+FROM tide_ports;
+
+-- =============================================
+-- 9. EXPORT QUERIES FOR EXTERNAL TOOLS
 -- =============================================
 
 -- Export for marine weather integration
