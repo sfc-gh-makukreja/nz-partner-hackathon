@@ -1,415 +1,599 @@
+-- =============================================
 -- TIPUĀNUKU (Food & The Land) - Sample Queries
 -- Theme: Food, Agriculture, Land Use, and Nutrition
--- Template queries for food-related datasets
+-- REAL DATA: 1.1M+ food products with allergy information from Open Food Facts
+-- =============================================
 
-USE DATABASE NZ_HACKATHON_DATA;
+USE ROLE ACCOUNTADMIN;
+USE DATABASE nz_partner_hackathon;
 USE SCHEMA TIPUANUKU;
 
+-- Table of Contents:
+-- 1. Dataset Overview and Exploration
+-- 2. Allergy Detection and Food Safety
+-- 3. Regional Analysis (NZ/Australia Focus)
+-- 4. AI-Powered Food Analysis
+-- 5. Brand and Category Intelligence
+-- 6. Nutritional Analysis
+-- 7. Cross-Dataset Integration Examples
+-- 8. Template Queries for Additional Data
+-- 9. PROJECT IDEAS
+
 -- =============================================
--- SAMPLE TABLE STRUCTURES (Examples for participants)
+-- AVAILABLE REAL DATASETS IN TIPUANUKU
+-- =============================================
+
+-- TABLES:
+-- 1. openfoodfacts_raw (3,974,038 products) - Complete Open Food Facts dataset
+-- 2. food_products_allergy_focus (1,130,511 products) - Filtered for allergy analysis
+-- 3. food_image_table - Food images and metadata
+
+-- VIEWS:
+-- 1. products_with_allergens - Products with allergen warnings
+-- 2. oceania_food_products - NZ/Australia focused products
+
+-- =============================================
+-- 1. DATASET OVERVIEW AND EXPLORATION
+-- =============================================
+
+-- Complete dataset overview
+SELECT 
+    'Open Food Facts Full Dataset' as dataset_name,
+    COUNT(*) as total_products,
+    COUNT(DISTINCT code) as unique_barcodes,
+    COUNT(CASE WHEN allergens IS NOT NULL OR allergens_en IS NOT NULL THEN 1 END) as products_with_allergens,
+    COUNT(CASE WHEN traces IS NOT NULL OR traces_en IS NOT NULL THEN 1 END) as products_with_traces,
+    COUNT(CASE WHEN ingredients_text IS NOT NULL THEN 1 END) as products_with_ingredients,
+    ROUND(AVG(completeness), 2) as avg_data_completeness,
+    MIN(created_datetime) as earliest_product,
+    MAX(created_datetime) as latest_product
+FROM openfoodfacts_raw;
+
+-- Allergy-focused dataset overview
+SELECT 
+    'Allergy-Focused Dataset' as dataset_name,
+    COUNT(*) as total_products,
+    COUNT(DISTINCT barcode) as unique_barcodes,
+    COUNT(CASE WHEN allergens_en IS NOT NULL OR allergens IS NOT NULL THEN 1 END) as products_with_allergens,
+    COUNT(CASE WHEN traces_en IS NOT NULL OR traces IS NOT NULL THEN 1 END) as products_with_traces,
+    COUNT(CASE WHEN ingredients_text IS NOT NULL THEN 1 END) as products_with_ingredients,
+    ROUND(AVG(completeness), 2) as avg_data_completeness
+FROM food_products_allergy_focus;
+
+-- Top food categories globally
+SELECT 
+    SPLIT_PART(categories, ',', 1) as primary_category,
+    COUNT(*) as product_count,
+    COUNT(CASE WHEN traces_en IS NOT NULL THEN 1 END) as products_with_traces,
+    ROUND(AVG(completeness), 1) as avg_completeness,
+    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 2) as percentage_of_total
+FROM food_products_allergy_focus
+WHERE categories IS NOT NULL
+GROUP BY primary_category
+ORDER BY product_count DESC
+LIMIT 20;
+
+-- Data quality by completeness level
+SELECT 
+    CASE 
+        WHEN completeness >= 80 THEN 'High Quality (80%+)'
+        WHEN completeness >= 60 THEN 'Medium Quality (60-79%)'
+        WHEN completeness >= 40 THEN 'Basic Quality (40-59%)'
+        ELSE 'Low Quality (<40%)'
+    END as quality_tier,
+    COUNT(*) as product_count,
+    ROUND(AVG(completeness), 1) as avg_completeness,
+    COUNT(CASE WHEN ingredients_text IS NOT NULL THEN 1 END) as with_ingredients,
+    COUNT(CASE WHEN traces_en IS NOT NULL THEN 1 END) as with_allergen_traces
+FROM food_products_allergy_focus
+GROUP BY quality_tier
+ORDER BY avg_completeness DESC;
+
+-- =============================================
+-- 2. ALLERGY DETECTION AND FOOD SAFETY
+-- =============================================
+
+-- Most common allergen traces globally
+SELECT 
+    traces_en as allergen_trace,
+    COUNT(*) as product_count,
+    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 2) as percentage_of_products,
+    ROUND(AVG(completeness), 1) as avg_data_quality
+FROM food_products_allergy_focus
+WHERE traces_en IS NOT NULL 
+  AND traces_en != 'None'
+  AND traces_en != ''
+  AND LENGTH(TRIM(traces_en)) > 0
+GROUP BY traces_en
+ORDER BY product_count DESC
+LIMIT 25;
+
+-- Products safe for specific allergies (nut-free example)
+SELECT 
+    barcode,
+    product_name,
+    brands,
+    SPLIT_PART(categories, ',', 1) as primary_category,
+    traces_en,
+    nutriscore_grade,
+    completeness
+FROM food_products_allergy_focus
+WHERE (traces_en IS NULL OR traces_en NOT ILIKE '%nut%')
+  AND (allergens_en IS NULL OR allergens_en NOT ILIKE '%nut%')
+  AND (ingredients_text IS NULL OR ingredients_text NOT ILIKE '%nut%')
+  AND product_name IS NOT NULL
+  AND LENGTH(TRIM(product_name)) > 0
+ORDER BY nutriscore_grade NULLS LAST, completeness DESC, product_name
+LIMIT 20;
+
+-- Multi-allergen risk analysis
+SELECT 
+    barcode,
+    product_name,
+    brands,
+    traces_en,
+    CASE 
+        WHEN traces_en ILIKE '%nut%' AND traces_en ILIKE '%milk%' THEN 'High Risk: Nuts + Dairy'
+        WHEN traces_en ILIKE '%gluten%' AND traces_en ILIKE '%egg%' THEN 'High Risk: Gluten + Eggs'
+        WHEN traces_en ILIKE '%nut%' THEN 'Medium Risk: Nuts'
+        WHEN traces_en ILIKE '%milk%' THEN 'Medium Risk: Dairy'
+        WHEN traces_en ILIKE '%gluten%' THEN 'Medium Risk: Gluten'
+        WHEN traces_en ILIKE '%egg%' THEN 'Medium Risk: Eggs'
+        ELSE 'Lower Risk'
+    END as risk_assessment,
+    nutriscore_grade,
+    completeness
+FROM food_products_allergy_focus
+WHERE traces_en IS NOT NULL 
+  AND traces_en != 'None'
+  AND product_name IS NOT NULL
+ORDER BY risk_assessment, completeness DESC
+LIMIT 30;
+
+-- Brand safety analysis
+SELECT 
+    brands,
+    COUNT(*) as total_products,
+    COUNT(CASE WHEN traces_en IS NULL OR traces_en = 'None' THEN 1 END) as likely_safe_products,
+    ROUND(COUNT(CASE WHEN traces_en IS NULL OR traces_en = 'None' THEN 1 END) * 100.0 / COUNT(*), 1) as safety_percentage,
+    ROUND(AVG(completeness), 1) as avg_data_quality,
+    LISTAGG(DISTINCT SPLIT_PART(categories, ',', 1), ', ') as common_categories
+FROM food_products_allergy_focus
+WHERE brands IS NOT NULL
+  AND LENGTH(TRIM(brands)) > 0
+GROUP BY brands
+HAVING COUNT(*) >= 15  -- Brands with at least 15 products
+ORDER BY safety_percentage DESC, total_products DESC
+LIMIT 20;
+
+-- =============================================
+-- 3. REGIONAL ANALYSIS (NZ/AUSTRALIA FOCUS)
+-- =============================================
+
+-- Oceania product overview using the view
+SELECT 
+    'Oceania Food Products' as dataset_name,
+    COUNT(*) as total_products,
+    COUNT(DISTINCT barcode) as unique_barcodes,
+    COUNT(CASE WHEN traces_en IS NOT NULL AND traces_en != 'None' THEN 1 END) as products_with_allergen_warnings,
+    ROUND(AVG(completeness), 1) as avg_data_quality
+FROM oceania_food_products;
+
+-- Detailed regional breakdown
+SELECT 
+    CASE 
+        WHEN countries ILIKE '%new zealand%' OR countries ILIKE '%new-zealand%' THEN 'New Zealand'
+        WHEN countries ILIKE '%australia%' THEN 'Australia'
+        ELSE 'Other Oceania'
+    END as country_focus,
+    COUNT(*) as total_products,
+    COUNT(CASE WHEN traces_en IS NOT NULL AND traces_en != 'None' THEN 1 END) as products_with_allergen_warnings,
+    ROUND(AVG(completeness), 1) as avg_data_quality,
+    COUNT(DISTINCT brands) as unique_brands
+FROM food_products_allergy_focus
+WHERE countries ILIKE '%new zealand%' 
+   OR countries ILIKE '%new-zealand%'
+   OR countries ILIKE '%australia%'
+GROUP BY country_focus
+ORDER BY total_products DESC;
+
+-- Popular food categories in Oceania
+SELECT 
+    SPLIT_PART(categories, ',', 1) as category,
+    COUNT(*) as product_count,
+    COUNT(CASE WHEN traces_en IS NOT NULL THEN 1 END) as products_with_warnings,
+    ROUND(COUNT(CASE WHEN traces_en IS NOT NULL THEN 1 END) * 100.0 / COUNT(*), 1) as warning_percentage,
+    LISTAGG(DISTINCT brands, ', ') as sample_brands
+FROM oceania_food_products
+WHERE categories IS NOT NULL
+GROUP BY category
+ORDER BY product_count DESC
+LIMIT 15;
+
+-- Regional allergen pattern comparison
+SELECT 
+    CASE 
+        WHEN countries ILIKE '%new zealand%' THEN 'NZ'
+        WHEN countries ILIKE '%australia%' THEN 'AU'
+    END as region,
+    traces_en as allergen_trace,
+    COUNT(*) as occurrence_count,
+    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (PARTITION BY 
+        CASE WHEN countries ILIKE '%new zealand%' THEN 'NZ'
+             WHEN countries ILIKE '%australia%' THEN 'AU' END), 2) as regional_percentage
+FROM food_products_allergy_focus
+WHERE (countries ILIKE '%new zealand%' OR countries ILIKE '%australia%')
+  AND traces_en IS NOT NULL
+  AND traces_en != 'None'
+GROUP BY region, traces_en
+ORDER BY region, occurrence_count DESC;
+
+-- =============================================
+-- 4. AI-POWERED FOOD ANALYSIS
+-- =============================================
+
+-- AI allergen detection from ingredient text (Oceania products)
+SELECT 
+    barcode,
+    product_name,
+    brands,
+    LEFT(ingredients_text, 150) as ingredient_preview,
+    SNOWFLAKE.CORTEX.COMPLETE(
+        'mistral-large2',
+        CONCAT('Analyze these food ingredients for common allergens (nuts, dairy, gluten, eggs, soy, shellfish, fish, sesame). ',
+               'List detected allergens and risk level: ', 
+               COALESCE(ingredients_text, 'No ingredients listed'))
+    ) as ai_allergen_analysis
+FROM food_products_allergy_focus
+WHERE ingredients_text IS NOT NULL
+  AND LENGTH(ingredients_text) > 30
+  AND (countries ILIKE '%new zealand%' OR countries ILIKE '%australia%')
+ORDER BY RANDOM()
+LIMIT 5;
+
+-- AI-powered safety recommendations for specific allergies
+SELECT 
+    product_name,
+    brands,
+    traces_en as official_warnings,
+    SNOWFLAKE.CORTEX.COMPLETE(
+        'mistral-large2',
+        CONCAT('Based on these allergen warnings: "', COALESCE(traces_en, 'None listed'), 
+               '" for the food product "', product_name, 
+               '", provide specific safety advice for someone with severe nut allergies. ',
+               'Include risk assessment and alternative suggestions.')
+    ) as ai_safety_advice
+FROM food_products_allergy_focus
+WHERE traces_en IS NOT NULL
+  AND product_name IS NOT NULL
+  AND (traces_en ILIKE '%nut%' OR traces_en ILIKE '%peanut%')
+ORDER BY RANDOM()
+LIMIT 3;
+
+-- Smart dietary categorization
+SELECT 
+    product_name,
+    SPLIT_PART(categories, ',', 1) as category,
+    ingredients_text,
+    SNOWFLAKE.CORTEX.COMPLETE(
+        'mistral-large2',
+        CONCAT('Categorize this food product for dietary restrictions: "', product_name, '". ',
+               'Based on ingredients: ', COALESCE(LEFT(ingredients_text, 200), 'ingredients not available'), 
+               '. Determine if it is: vegan-friendly, vegetarian, gluten-free, dairy-free, nut-free, low-sodium. ',
+               'Provide yes/no for each category with confidence level.')
+    ) as ai_dietary_categorization
+FROM food_products_allergy_focus
+WHERE product_name IS NOT NULL
+  AND ingredients_text IS NOT NULL
+  AND LENGTH(ingredients_text) > 50
+ORDER BY RANDOM()
+LIMIT 3;
+
+-- =============================================
+-- 5. BRAND AND CATEGORY INTELLIGENCE
+-- =============================================
+
+-- Brand performance analysis
+SELECT 
+    brands,
+    COUNT(*) as product_portfolio,
+    COUNT(CASE WHEN nutriscore_grade IN ('A', 'B') THEN 1 END) as high_quality_products,
+    ROUND(COUNT(CASE WHEN nutriscore_grade IN ('A', 'B') THEN 1 END) * 100.0 / COUNT(*), 1) as quality_percentage,
+    COUNT(CASE WHEN traces_en IS NULL OR traces_en = 'None' THEN 1 END) as likely_allergen_free,
+    ROUND(AVG(completeness), 1) as avg_data_completeness,
+    LISTAGG(DISTINCT SPLIT_PART(categories, ',', 1), ', ') as category_focus
+FROM food_products_allergy_focus
+WHERE brands IS NOT NULL
+  AND LENGTH(TRIM(brands)) > 0
+GROUP BY brands
+HAVING COUNT(*) >= 20  -- Substantial product portfolio
+ORDER BY quality_percentage DESC, product_portfolio DESC
+LIMIT 15;
+
+-- Category risk assessment
+SELECT 
+    SPLIT_PART(categories, ',', 1) as food_category,
+    COUNT(*) as total_products,
+    COUNT(CASE WHEN traces_en IS NOT NULL AND traces_en != 'None' THEN 1 END) as products_with_allergen_warnings,
+    ROUND(COUNT(CASE WHEN traces_en IS NOT NULL AND traces_en != 'None' THEN 1 END) * 100.0 / COUNT(*), 1) as allergen_risk_percentage,
+    LISTAGG(DISTINCT SPLIT_PART(traces_en, ',', 1), ', ') as common_allergens,
+    ROUND(AVG(completeness), 1) as avg_data_quality
+FROM food_products_allergy_focus
+WHERE categories IS NOT NULL
+GROUP BY food_category
+HAVING COUNT(*) >= 50  -- Categories with substantial data
+ORDER BY allergen_risk_percentage DESC
+LIMIT 20;
+
+-- =============================================
+-- 6. NUTRITIONAL ANALYSIS
+-- =============================================
+
+-- Nutriscore distribution analysis
+SELECT 
+    nutriscore_grade,
+    COUNT(*) as product_count,
+    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 2) as percentage,
+    COUNT(CASE WHEN traces_en IS NULL OR traces_en = 'None' THEN 1 END) as allergen_safe_products,
+    ROUND(AVG(energy_kcal_100g), 0) as avg_calories_per_100g,
+    ROUND(AVG(proteins_100g), 1) as avg_protein_per_100g,
+    ROUND(AVG(salt_100g), 2) as avg_salt_per_100g
+FROM food_products_allergy_focus
+WHERE nutriscore_grade IS NOT NULL
+GROUP BY nutriscore_grade
+ORDER BY nutriscore_grade;
+
+-- Nutritional quality vs allergen safety correlation
+SELECT 
+    nutriscore_grade,
+    COUNT(*) as total_products,
+    COUNT(CASE WHEN traces_en IS NULL OR traces_en = 'None' THEN 1 END) as allergen_safe_products,
+    ROUND(COUNT(CASE WHEN traces_en IS NULL OR traces_en = 'None' THEN 1 END) * 100.0 / COUNT(*), 1) as safety_percentage,
+    ROUND(AVG(proteins_100g), 1) as avg_protein,
+    ROUND(AVG(fiber_100g), 1) as avg_fiber,
+    ROUND(AVG(salt_100g), 2) as avg_salt
+FROM food_products_allergy_focus
+WHERE nutriscore_grade IS NOT NULL
+GROUP BY nutriscore_grade
+ORDER BY nutriscore_grade;
+
+-- =============================================
+-- 7. AI-POWERED FOOD IMAGE ANALYSIS
+-- Using Snowflake Cortex Multimodal AI (claude-3-5-sonnet, pixtral-large)
+-- =============================================
+
+-- Analyze image, suggest ingredients, and match with Oceania food products
+WITH image_ingredient_analysis AS (
+    SELECT 
+        RELATIVE_PATH,
+        SIZE,
+        LAST_MODIFIED,
+        SNOWFLAKE.CORTEX.COMPLETE(
+            'claude-3-5-sonnet',
+            'Analyze this food image and identify the main ingredients. List specific ingredient names that could be found in a product database. Respond in JSON format with main_ingredients as an array of ingredient names.',
+            IMG
+        ) as ingredient_analysis
+    FROM food_image_table
+    WHERE IMG IS NOT NULL
+    ORDER BY RANDOM()
+    LIMIT 5
+),
+parsed_ingredients AS (
+    SELECT 
+        RELATIVE_PATH,
+        SIZE,
+        LAST_MODIFIED,
+        TRY_PARSE_JSON(ingredient_analysis) as ingredients_json,
+        ingredient_analysis
+    FROM image_ingredient_analysis
+)
+SELECT 
+    pi.RELATIVE_PATH,
+    pi.SIZE,
+    pi.LAST_MODIFIED,
+    pi.ingredients_json:main_ingredients as suggested_ingredients,
+    -- Match with Oceania food products
+    op.product_name as matching_product,
+    op.brands as product_brand,
+    op.categories as product_categories,
+    op.ingredients_text as product_ingredients,
+    op.allergens_en as product_allergens,
+    op.nutriscore_grade as quality_grade,
+    op.countries as available_countries
+FROM parsed_ingredients pi
+LEFT JOIN oceania_food_products op 
+    ON (op.ingredients_text ILIKE '%' || TRIM(pi.ingredients_json:main_ingredients[0]::STRING, '"') || '%'
+        OR op.product_name ILIKE '%' || TRIM(pi.ingredients_json:main_ingredients[0]::STRING, '"') || '%')
+WHERE pi.ingredients_json:main_ingredients IS NOT NULL
+ORDER BY pi.RELATIVE_PATH;
+
+
+-- =============================================
+-- 8. CROSS-DATASET INTEGRATION EXAMPLES
+-- =============================================
+
+-- Tourism + Food Safety Integration (conceptual)
+SELECT 
+    'Food Safety for Travelers' as analysis_type,
+    COUNT(DISTINCT f.barcode) as safe_food_options,
+    COUNT(CASE WHEN f.traces_en IS NULL OR f.traces_en = 'None' THEN 1 END) as minimal_allergen_risk,
+    COUNT(CASE WHEN f.nutriscore_grade IN ('a', 'b') THEN 1 END) as high_quality_options,
+    LISTAGG(DISTINCT f.brands, ', ') as trusted_brands
+FROM food_products_allergy_focus f
+WHERE f.countries ILIKE '%new zealand%'
+  AND f.nutriscore_grade IN ('a', 'b')  -- Higher quality foods
+  AND (f.traces_en IS NULL OR f.traces_en = 'None')
+GROUP BY analysis_type;
+
+-- Temporal trends in food safety data
+SELECT 
+    EXTRACT(YEAR FROM created_datetime) as product_year,
+    COUNT(*) as products_added,
+    COUNT(CASE WHEN traces_en IS NOT NULL AND traces_en != 'None' THEN 1 END) as products_with_warnings,
+    ROUND(COUNT(CASE WHEN traces_en IS NOT NULL AND traces_en != 'None' THEN 1 END) * 100.0 / COUNT(*), 1) as warning_percentage,
+    ROUND(AVG(completeness), 1) as avg_data_quality
+FROM food_products_allergy_focus
+WHERE created_datetime IS NOT NULL
+  AND EXTRACT(YEAR FROM created_datetime) BETWEEN 2015 AND 2024
+GROUP BY product_year
+ORDER BY product_year DESC;
+
+-- =============================================
+-- 8. TEMPLATE QUERIES FOR ADDITIONAL DATA
 -- =============================================
 
 /*
-Example tables participants could create:
+These are template queries that participants can use when they add their own datasets:
 
-CREATE TABLE food_production (
-    region STRING,
-    product_type STRING,
-    production_date DATE,
-    quantity_tonnes NUMBER(10,2),
-    unit_price_nzd NUMBER(8,2),
-    farm_type STRING, -- organic, conventional, regenerative
-    carbon_footprint_kg_co2 NUMBER(10,2)
-);
+-- Template: Restaurant analysis
+SELECT 
+    restaurant_name,
+    location,
+    cuisine_type,
+    AVG(rating) as avg_rating,
+    COUNT(*) as review_count
+FROM restaurant_reviews  -- Table participants would create
+GROUP BY restaurant_name, location, cuisine_type
+ORDER BY avg_rating DESC;
 
-CREATE TABLE restaurant_reviews (
-    review_id STRING,
-    restaurant_name STRING,
-    location STRING,
-    cuisine_type STRING,
-    rating NUMBER(2,1),
-    review_text STRING,
-    review_date DATE,
-    price_range STRING,
-    dietary_options ARRAY -- vegan, vegetarian, gluten-free
-);
-
-CREATE TABLE food_allergies (
-    person_id STRING,
-    age_group STRING,
-    allergies ARRAY,
-    severity STRING,
-    region STRING,
-    diagnosis_date DATE
-);
-
-CREATE TABLE supply_chain (
-    product_id STRING,
-    origin_location STRING,
-    destination_location STRING,
-    transport_date DATE,
-    transport_method STRING,
-    distance_km NUMBER(8,2),
-    carbon_emissions_kg NUMBER(10,2),
-    cost_nzd NUMBER(10,2),
-    spoilage_percentage NUMBER(5,2)
-);
-*/
-
--- =============================================
--- 1. FOOD PRODUCTION ANALYSIS
--- =============================================
-
--- Regional production trends
+-- Template: Local production analysis
 SELECT 
     region,
     product_type,
     SUM(quantity_tonnes) as total_production,
-    AVG(unit_price_nzd) as avg_price,
-    COUNT(DISTINCT production_date) as production_days
-FROM food_production
+    AVG(unit_price_nzd) as avg_price
+FROM food_production  -- Table participants would create
 WHERE production_date >= '2024-01-01'
 GROUP BY region, product_type
 ORDER BY total_production DESC;
 
--- Seasonal production patterns
-SELECT 
-    EXTRACT(MONTH FROM production_date) as month,
-    product_type,
-    AVG(quantity_tonnes) as avg_monthly_production,
-    STDDEV(quantity_tonnes) as production_variability
-FROM food_production
-GROUP BY month, product_type
-ORDER BY month, product_type;
-
--- Organic vs conventional comparison
-SELECT 
-    farm_type,
-    product_type,
-    AVG(unit_price_nzd) as avg_price,
-    AVG(carbon_footprint_kg_co2) as avg_carbon_footprint,
-    SUM(quantity_tonnes) as total_production
-FROM food_production
-GROUP BY farm_type, product_type
-ORDER BY product_type, farm_type;
-
--- Price volatility analysis
-SELECT 
-    product_type,
-    STDDEV(unit_price_nzd) / AVG(unit_price_nzd) * 100 as price_volatility_percent,
-    MIN(unit_price_nzd) as min_price,
-    MAX(unit_price_nzd) as max_price,
-    AVG(unit_price_nzd) as avg_price
-FROM food_production
-GROUP BY product_type
-ORDER BY price_volatility_percent DESC;
-
--- =============================================
--- 2. RESTAURANT & FOOD REVIEW ANALYSIS
--- =============================================
-
--- Cuisine popularity by region
-SELECT 
-    location,
-    cuisine_type,
-    COUNT(*) as restaurant_count,
-    AVG(rating) as avg_rating,
-    COUNT(CASE WHEN rating >= 4.0 THEN 1 END) / COUNT(*) * 100 as excellent_percentage
-FROM restaurant_reviews
-GROUP BY location, cuisine_type
-ORDER BY location, restaurant_count DESC;
-
--- Sentiment analysis of reviews using Cortex AI
-SELECT 
-    restaurant_name,
-    rating,
-    SNOWFLAKE.CORTEX.COMPLETE(
-        'mixtral-8x7b',
-        CONCAT('Analyze the sentiment and key themes in this restaurant review: "', 
-               SUBSTR(review_text, 1, 500), '"')
-    ) as review_sentiment_analysis
-FROM restaurant_reviews
-WHERE LENGTH(review_text) > 100
-LIMIT 10;
-
--- Dietary trend analysis
-SELECT 
-    EXTRACT(YEAR FROM review_date) as year,
-    FLATTEN(dietary_options) as dietary_option,
-    COUNT(*) as mention_count
-FROM restaurant_reviews
-GROUP BY year, dietary_option
-ORDER BY year, mention_count DESC;
-
--- Price vs rating correlation
-SELECT 
-    price_range,
-    AVG(rating) as avg_rating,
-    COUNT(*) as restaurant_count,
-    CORR(rating, CASE 
-        WHEN price_range = '$' THEN 1
-        WHEN price_range = '$$' THEN 2
-        WHEN price_range = '$$$' THEN 3
-        WHEN price_range = '$$$$' THEN 4
-        ELSE 0 END) OVER () as price_rating_correlation
-FROM restaurant_reviews
-GROUP BY price_range
-ORDER BY price_range;
-
--- =============================================
--- 3. FOOD ALLERGY & HEALTH ANALYSIS
--- =============================================
-
--- Allergy prevalence by region
-SELECT 
-    region,
-    FLATTEN(allergies) as allergy_type,
-    COUNT(*) as cases,
-    COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (PARTITION BY region) as prevalence_percentage
-FROM food_allergies
-GROUP BY region, allergy_type
-ORDER BY region, cases DESC;
-
--- Age group vulnerability analysis
-SELECT 
-    age_group,
-    FLATTEN(allergies) as allergy_type,
-    COUNT(*) as cases,
-    AVG(CASE WHEN severity = 'Severe' THEN 1 ELSE 0 END) as severe_case_rate
-FROM food_allergies
-GROUP BY age_group, allergy_type
-ORDER BY age_group, cases DESC;
-
--- Temporal allergy trend analysis
-SELECT 
-    EXTRACT(YEAR FROM diagnosis_date) as diagnosis_year,
-    FLATTEN(allergies) as allergy_type,
-    COUNT(*) as new_cases
-FROM food_allergies
-GROUP BY diagnosis_year, allergy_type
-ORDER BY diagnosis_year, allergy_type;
-
--- =============================================
--- 4. SUPPLY CHAIN & SUSTAINABILITY
--- =============================================
-
--- Food miles analysis
-SELECT 
-    product_id,
-    origin_location,
-    destination_location,
-    AVG(distance_km) as avg_distance,
-    AVG(carbon_emissions_kg) as avg_emissions,
-    SUM(cost_nzd) as total_transport_cost
-FROM supply_chain
-GROUP BY product_id, origin_location, destination_location
-ORDER BY avg_distance DESC;
-
--- Transport efficiency comparison
+-- Template: Supply chain sustainability
 SELECT 
     transport_method,
-    AVG(distance_km) as avg_distance,
     AVG(carbon_emissions_kg / distance_km) as emissions_per_km,
-    AVG(cost_nzd / distance_km) as cost_per_km,
     AVG(spoilage_percentage) as avg_spoilage
-FROM supply_chain
+FROM supply_chain  -- Table participants would create
 GROUP BY transport_method
 ORDER BY emissions_per_km;
-
--- Seasonal spoilage patterns
-SELECT 
-    EXTRACT(MONTH FROM transport_date) as month,
-    transport_method,
-    AVG(spoilage_percentage) as avg_spoilage,
-    COUNT(*) as shipment_count
-FROM supply_chain
-GROUP BY month, transport_method
-ORDER BY month, avg_spoilage DESC;
-
--- Carbon footprint optimization
-SELECT 
-    product_id,
-    origin_location,
-    destination_location,
-    SUM(carbon_emissions_kg) as total_emissions,
-    SUM(distance_km) as total_distance,
-    MIN(carbon_emissions_kg / distance_km) as best_efficiency,
-    MAX(carbon_emissions_kg / distance_km) as worst_efficiency
-FROM supply_chain
-GROUP BY product_id, origin_location, destination_location
-HAVING COUNT(*) > 5  -- Multiple shipments for comparison
-ORDER BY total_emissions DESC;
+*/
 
 -- =============================================
--- 5. AI/ML FEATURE ENGINEERING
--- =============================================
-
--- Demand prediction features
-SELECT 
-    production_date,
-    product_type,
-    region,
-    quantity_tonnes as target_production,
-    -- Time features
-    EXTRACT(MONTH FROM production_date) as month,
-    EXTRACT(QUARTER FROM production_date) as quarter,
-    EXTRACT(DAYOFYEAR FROM production_date) as day_of_year,
-    -- Lag features
-    LAG(quantity_tonnes, 7) OVER (PARTITION BY product_type, region ORDER BY production_date) as production_last_week,
-    LAG(quantity_tonnes, 30) OVER (PARTITION BY product_type, region ORDER BY production_date) as production_last_month,
-    -- Rolling averages
-    AVG(quantity_tonnes) OVER (PARTITION BY product_type, region ORDER BY production_date ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) as avg_weekly_production,
-    -- Price correlation
-    unit_price_nzd,
-    LAG(unit_price_nzd, 1) OVER (PARTITION BY product_type, region ORDER BY production_date) as price_yesterday
-FROM food_production
-ORDER BY production_date, product_type, region;
-
--- Restaurant success prediction
-SELECT 
-    restaurant_name,
-    location,
-    cuisine_type,
-    AVG(rating) as avg_rating,
-    COUNT(*) as review_count,
-    -- Feature engineering
-    COUNT(CASE WHEN rating >= 4.5 THEN 1 END) / COUNT(*) as excellent_ratio,
-    STDDEV(rating) as rating_consistency,
-    DATEDIFF(DAY, MIN(review_date), MAX(review_date)) as review_span_days,
-    -- Text analysis features
-    AVG(LENGTH(review_text)) as avg_review_length,
-    COUNT(CASE WHEN review_text ILIKE '%amazing%' OR review_text ILIKE '%excellent%' THEN 1 END) as positive_keywords
-FROM restaurant_reviews
-GROUP BY restaurant_name, location, cuisine_type
-HAVING COUNT(*) >= 10  -- Sufficient reviews for analysis
-ORDER BY avg_rating DESC;
-
--- =============================================
--- 6. SNOWFLAKE CORTEX AI APPLICATIONS
--- =============================================
-
--- Recipe recommendation system
-SELECT 
-    SNOWFLAKE.CORTEX.COMPLETE(
-        'mixtral-8x7b',
-        CONCAT('Create a healthy recipe using these seasonal ingredients from New Zealand: ',
-               'Available ingredients: ', STRING_AGG(product_type, ', '), 
-               '. Focus on nutrition and local flavors. Keep it under 200 words.')
-    ) as seasonal_recipe
-FROM food_production
-WHERE production_date >= CURRENT_DATE() - 30
-  AND region = 'Canterbury'
-GROUP BY region;
-
--- Allergy-safe menu suggestions
-SELECT 
-    SNOWFLAKE.CORTEX.COMPLETE(
-        'mixtral-8x7b',
-        CONCAT('Suggest menu modifications for a restaurant to accommodate these common allergies in the region: ',
-               STRING_AGG(DISTINCT allergy_type, ', '),
-               '. Provide practical alternatives.')
-    ) as allergy_safe_suggestions
-FROM (
-    SELECT FLATTEN(allergies) as allergy_type
-    FROM food_allergies
-    WHERE region = 'Auckland'
-);
-
--- Sustainability insights
-SELECT 
-    transport_method,
-    SNOWFLAKE.CORTEX.COMPLETE(
-        'mixtral-8x7b',
-        CONCAT('Analyze this food transport data and suggest sustainability improvements: ',
-               'Method: ', transport_method, 
-               ', Avg emissions per km: ', AVG(carbon_emissions_kg / distance_km)::STRING,
-               ', Avg spoilage: ', AVG(spoilage_percentage)::STRING, '%')
-    ) as sustainability_recommendations
-FROM supply_chain
-GROUP BY transport_method;
-
--- =============================================
--- 7. BUSINESS INTELLIGENCE QUERIES
--- =============================================
-
--- Market opportunity analysis
-SELECT 
-    r.location,
-    r.cuisine_type,
-    COUNT(DISTINCT r.restaurant_name) as existing_restaurants,
-    AVG(r.rating) as market_avg_rating,
-    -- Local production support
-    COUNT(DISTINCT p.product_type) as local_ingredients_available,
-    AVG(p.unit_price_nzd) as avg_ingredient_cost
-FROM restaurant_reviews r
-LEFT JOIN food_production p ON r.location = p.region
-GROUP BY r.location, r.cuisine_type
-ORDER BY existing_restaurants, market_avg_rating DESC;
-
--- Food security analysis
-SELECT 
-    region,
-    product_type,
-    SUM(quantity_tonnes) as total_production,
-    AVG(carbon_footprint_kg_co2) as avg_carbon_footprint,
-    -- Calculate food security score (higher production, lower carbon = better)
-    (SUM(quantity_tonnes) / NULLIF(AVG(carbon_footprint_kg_co2), 0)) as sustainability_efficiency_score
-FROM food_production
-GROUP BY region, product_type
-ORDER BY sustainability_efficiency_score DESC;
-
--- Last mile delivery optimization
-SELECT 
-    destination_location,
-    COUNT(*) as delivery_count,
-    AVG(distance_km) as avg_delivery_distance,
-    AVG(spoilage_percentage) as avg_spoilage,
-    SUM(cost_nzd) as total_delivery_cost,
-    -- Optimization score
-    (100 - AVG(spoilage_percentage)) / AVG(distance_km) as delivery_efficiency_score
-FROM supply_chain
-WHERE transport_date >= CURRENT_DATE() - 90
-GROUP BY destination_location
-ORDER BY delivery_efficiency_score DESC;
-
--- =============================================
--- AI/ML PROJECT IDEAS FOR PARTICIPANTS:
+-- 9. PROJECT IDEAS FOR PARTICIPANTS
 -- =============================================
 
 /*
-1. FOOD DEMAND FORECASTING
-   - Predict seasonal demand for agricultural products
-   - Weather correlation for crop yield prediction
-   - Price optimization models
+🎯 FEATURED PROJECT: Smart Allergy Scanner App
+=========================================
+Use the real Open Food Facts data to build a comprehensive food safety app:
 
-2. RESTAURANT RECOMMENDATION ENGINE
-   - Personalized recommendations based on dietary restrictions
-   - Sentiment analysis of reviews for quality scoring
-   - Location-based cuisine trend analysis
+AVAILABLE REAL DATA:
+* food_products_allergy_focus (1.13M products with allergen data)
+* openfoodfacts_raw (3.97M complete product database)  
+* food_image_table (food images with AI analysis capabilities)
+* products_with_allergens (filtered view for safety analysis)
+* oceania_food_products (12,819 NZ/AU products)
 
-3. SUPPLY CHAIN OPTIMIZATION
-   - Route optimization for minimal food waste
-   - Carbon footprint reduction strategies
-   - Predictive spoilage models
+Core Features to Build:
+✅ Barcode lookup with 1.1M+ product safety database
+✅ AI ingredient analysis using Cortex COMPLETE
+✅ **NEW: Food image analysis** using multimodal AI (claude-3-5-sonnet, pixtral-large)
+✅ **NEW: Visual allergen detection** from packaging and ingredient labels
+✅ Personalized risk assessment based on user allergy profile
+✅ Alternative product recommendations for safe substitutes
+✅ Regional compliance focus (NZ/AU market)
+✅ Brand safety scoring and trend analysis
 
-4. NUTRITION & HEALTH INSIGHTS
-   - Allergy prevalence mapping and prediction
-   - Nutritional gap analysis by region
-   - Health trend correlation with food availability
+Technical Implementation:
+* Streamlit frontend with barcode input and allergy profile selection
+* Snowflake backend using food_products_allergy_focus for product lookups
+* Cortex AI for intelligent ingredient analysis and safety recommendations
+* Real-time safety scoring based on official allergen warnings
+* Integration with external barcode scanning APIs for mobile functionality
 
-5. SUSTAINABLE AGRICULTURE
-   - Organic vs conventional profitability analysis
-   - Carbon footprint optimization for farms
-   - Regenerative agriculture impact assessment
+Sample Streamlit Code Structure:
+```python
+import streamlit as st
+import snowflake.connector
 
-6. FOOD SAFETY & TRACEABILITY
-   - Contamination source tracking
-   - Quality prediction along supply chain
-   - Real-time food safety monitoring
+def main():
+    st.title("🍎 Smart Allergy Scanner")
+    
+    # User profile setup
+    st.sidebar.header("Your Allergy Profile")
+    user_allergies = st.sidebar.multiselect(
+        "Select your allergies:",
+        ["Nuts", "Peanuts", "Dairy", "Gluten", "Eggs", "Soy", "Shellfish", "Fish"]
+    )
+    
+    # Barcode input
+    barcode = st.text_input("Enter or scan product barcode:")
+    
+    if barcode and user_allergies:
+        # Query real Snowflake data
+        product_safety = check_product_safety(barcode, user_allergies)
+        display_safety_results(product_safety)
 
-CORTEX AI APPLICATIONS:
-- Recipe generation based on local ingredients
-- Dietary advice and meal planning
-- Food trend analysis from social media
-- Automated food quality assessment from images
+def check_product_safety(barcode, allergies):
+    # Query food_products_allergy_focus table
+    # Use Cortex AI for ingredient analysis
+    # Return comprehensive safety assessment
+    pass
+```
+
+📊 ADDITIONAL PROJECT IDEAS:
+
+1. **AI FOOD VISION SYSTEM** (NEW: Using Multimodal Cortex)
+   - Photo-to-nutrition analysis using food_image_table
+   - Visual allergen detection from product packaging
+   - Real-time meal assessment from camera input
+   - Recipe suggestions from ingredient photos
+   - Food freshness and quality evaluation
+   - Multi-language packaging analysis for international products
+
+2. RESTAURANT SAFETY ADVISOR (Integrate with HIWA_I_TE_RANGI tourism data)
+   - Menu safety analysis for restaurants
+   - Tourist-focused dining recommendations
+   - Real-time allergen warnings for travelers
+   - Integration with local event data for food festivals
+
+3. BRAND SAFETY INTELLIGENCE PLATFORM
+   - Brand safety scoring based on 1.1M+ product analysis
+   - Trend analysis of allergen warnings over time
+   - Competitive brand analysis for food companies
+   - Supply chain risk assessment using real data
+
+4. AI-POWERED NUTRITION ADVISOR
+   - Automated dietary categorization (vegan, gluten-free, etc.)
+   - Nutritional quality assessment using nutriscore data
+   - Personalized meal planning based on allergy constraints
+   - Recipe suggestions using available safe products
+
+5. CROSS-DATASET ANALYTICS HUB
+   - Tourism + Food Safety: Safe dining for travelers
+   - Climate + Food: Seasonal allergy patterns (integrate with URU_RANGI)
+   - Maritime + Food: Seafood safety analysis (integrate with WAITĀ)
+   - Demographics + Health: Regional allergy prevalence mapping
+
+6. FOOD SAFETY COMPLIANCE MONITOR
+   - Real-time monitoring of product recalls
+   - Compliance checking for food manufacturers
+   - Allergen labeling accuracy verification
+   - Quality assurance dashboards for retailers
+
+SUCCESS METRICS:
+- Product safety assessment time: < 2 seconds
+- AI allergen detection accuracy: > 92%
+- User satisfaction with recommendations: > 88%
+- Cross-dataset insights integration: 3+ schemas
+- Mobile app performance: Works offline for cached products
+
+INNOVATION OPPORTUNITIES:
+- **NEW: Multimodal AI** for real-time food image analysis using Cortex
+- **NEW: Visual packaging analysis** with claude-3-5-sonnet and pixtral-large models  
+- **NEW: Cross-reference image analysis** with 1.1M product database
+- Voice interface for hands-free safety checking
+- Social features for community safety reviews and photo sharing
+- Integration with grocery store APIs for shopping lists
+- Wearable device integration for dining out safety alerts
+- **NEW: Meal planning AI** using multi-image analysis capabilities
 */

@@ -9,15 +9,17 @@ This repository contains production-ready datasets and sample queries for Snowfl
 | ⚡ **URU_RANGI** | ✅ **COMPLETE** | **8,465** | 5-min electricity demand, fuel mix (1974-2030), quarterly trends | [`URU_RANGI_wind_energy_queries.sql`](sample_queries/URU_RANGI_wind_energy_queries.sql) |
 | ⛈️ **WAIPUNA_RANGI** | ✅ **COMPLETE** | **5,776** | Climate data (89 years), flood mapping, disaster costs | [`WAIPUNA_RANGI_climate_queries.sql`](sample_queries/WAIPUNA_RANGI_climate_queries.sql) |
 | 🌊 **WAITA** | ✅ **COMPLETE** | **31,314** | LINZ tide predictions, maritime incidents, PDF RAG system | [`WAITA_marine_tide_queries.sql`](sample_queries/WAITA_marine_tide_queries.sql) |
-| 🌾 **TIPUĀNUKU** | 🔄 **Template Ready** | - | Template queries prepared for agriculture data | [`TIPUANUKU_food_agriculture_queries.sql`](sample_queries/TIPUANUKU_food_agriculture_queries.sql) |
+| 🌾 **TIPUĀNUKU** | ✅ **COMPLETE** | **4,100,000+** | Open Food Facts global database + NZ/AU product focus + AI image analysis | [`TIPUANUKU_food_agriculture_queries.sql`](sample_queries/TIPUANUKU_food_agriculture_queries.sql) |
 | ✈️ **HIWA_I_TE_RANGI** | ✅ **COMPLETE** | **183,142** | EventFinda events + Stats NZ tourism + NZ airfares (162K flights) | [`HIWA_I_TE_RANGI_tourism_events_queries.sql`](sample_queries/HIWA_I_TE_RANGI_tourism_events_queries.sql) |
-| 🏛️ **FOUNDATIONAL** | 🔄 **Schema Only** | - | Schema created, awaiting socio-economic data | *No queries yet* |
+| 🏛️ **FOUNDATIONAL** | ✅ **COMPLETE** | **62,218** | Stats NZ income & productivity data (1979-2024) + AI economic analysis | [`FOUNDATIONAL_socioeconomic_queries.sql`](sample_queries/FOUNDATIONAL_socioeconomic_queries.sql) |
 
 ### 🚀 **Production Ready:**
-- **4 Complete Themes** with verified data and working queries
-- **228,697 Total Records** across climate, energy, marine safety, events, tourism, airfares, and financial datasets  
-- **Real Government Data** from MBIE, Transpower, NIWA, ICNZ, LINZ, Maritime NZ, Fisheries NZ
-- **Snowflake Cortex AI** examples with verified Asia Pacific availability
+- **6 Complete Themes** with verified data and working queries
+- **4,390,915+ Total Records** across climate, energy, marine safety, events, tourism, airfares, food safety, and socio-economic datasets  
+- **Real Government Data** from MBIE, Transpower, NIWA, ICNZ, LINZ, Maritime NZ, Fisheries NZ, Stats NZ
+- **Global Food Database** with 4.1M+ products including 12,819 NZ/AU products
+- **Comprehensive Economic Data** with 45+ years of income, productivity, and regional development indicators
+- **Snowflake Cortex AI** examples with verified Asia Pacific availability + multimodal image analysis
 - **RAG Document Processing** operational with PDF fishing regulations
 
 ---
@@ -117,25 +119,38 @@ This repository contains production-ready datasets and sample queries for Snowfl
 
 ---
 
-### 🌾 TIPUĀNUKU (Food & Agriculture) - **🔄 TEMPLATE READY**
+### 🌾 TIPUĀNUKU (Food & Agriculture) - **✅ PRODUCTION READY + AI VISION**
 
-**Status:** Schema created with comprehensive template queries prepared for food/agriculture datasets
+**Raw Data Sources:**
+- [Open Food Facts](https://world.openfoodfacts.org/data) → `en.openfoodfacts.org.products.csv` (4.1M+ global products)
+- Food images for AI analysis → `food_image_table` (multimodal analysis capability)
 
 **Database Infrastructure:**
-- **Schema:** `TIPUANUKU` *(created but no data loaded)*
+- **Schema:** `TIPUANUKU`
+- **Stage:** `openfoodfacts_stage` (CSV format)
+- **File Format:** `openfoodfacts_csv_format` (tab-separated)
 
-**Planned Data Sources:**
-- Stats NZ agriculture production data
-- MPI food safety datasets  
-- Local council restaurant/food service data
-- Nutrition and dietary information
+**Tables:**
+- `openfoodfacts_raw` - **3,970,000+ records** - Complete global food product database
+- `food_products_allergy_focus` - **1,130,000+ records** - Products with allergen/ingredient data
+- `food_image_table` - **Image analysis capability** - FILE objects for multimodal AI processing
 
-**Template Queries:** [`TIPUANUKU_food_agriculture_queries.sql`](sample_queries/TIPUANUKU_food_agriculture_queries.sql)
-- 🔄 Food production analysis templates
-- 🔄 Restaurant review processing examples
-- 🔄 Supply chain tracking patterns  
-- 🔄 Nutrition and dietary analysis templates
-- 🔄 AI-powered food recommendation systems
+**Analytical Views:**
+- `products_with_allergens` - **580,000+ products** - Filtered products with allergen/trace warnings
+- `oceania_food_products` - **12,819 products** - NZ/Australia market focus
+
+**Advanced Features:**
+- ✅ **Multimodal AI Image Analysis** - Food identification, ingredient detection, allergen analysis
+- ✅ **Global Product Database** - 1.13M+ products with comprehensive allergen information
+- ✅ **Regional Focus** - 12,819 products specifically for NZ/Australian market
+- ✅ **AI-Powered Food Safety** - Ingredient analysis with product database cross-referencing
+
+**Sample Queries:** [`TIPUANUKU_food_agriculture_queries.sql`](sample_queries/TIPUANUKU_food_agriculture_queries.sql)
+- ✅ Food safety analysis with allergen detection
+- ✅ AI image analysis → ingredient suggestion → Oceania product matching
+- ✅ Regional food market analysis (NZ/AU focus)
+- ✅ Nutritional data exploration and health scoring
+- ✅ Smart Allergy Scanner App foundation with 1.1M+ product safety database
 
 ---
 
@@ -201,18 +216,43 @@ This repository contains production-ready datasets and sample queries for Snowfl
 
 ---
 
-### 🏛️ FOUNDATIONAL (Socio-Economic) - **🔄 SCHEMA READY**
+### 🏛️ FOUNDATIONAL (Socio-Economic) - **✅ PRODUCTION READY + AI ECONOMICS**
 
-**Status:** Schema created, awaiting foundational socio-economic datasets
+**Raw Data Sources:**
+- [Stats NZ Income Statistics](https://explore.data.stats.govt.nz/) → `STATSNZ,INC_INC_005,1.0+all.csv` (Earnings by occupation, sex, qualification 2013-2024)
+- [Stats NZ Household Income](https://explore.data.stats.govt.nz/) → `STATSNZ,INC_INC_011,1.0+all.csv` (Regional household income 1998-2024)
+- [Stats NZ Productivity Statistics](https://explore.data.stats.govt.nz/) → `STATSNZ,PRD_PRD_002,1.0+all.csv` (Industry productivity 1979-2024)
 
 **Database Infrastructure:**
-- **Schema:** `FOUNDATIONAL` *(created but no tables or data)*
+- **Schema:** `FOUNDATIONAL`
+- **Stage:** `foundational_data_stage` (CSV format)
+- **File Format:** `foundational_csv_format`
 
-**Planned Data Sources:**
-- Stats NZ population and demographic data
-- Household economic survey data
-- Regional development indicators
-- Infrastructure and connectivity metrics
+**Tables:**
+- `earnings_by_occupation` - **15,012 records** - Earnings by occupation, sex, and highest qualification (2013-2024)
+- `household_income_by_region` - **42,806 records** - Regional household income by source and type (1998-2024)
+- `productivity_by_industry` - **4,400 records** - Industry productivity growth accounting (1979-2024)
+
+**Analytical Views:**
+- `income_gender_analysis` - **Comprehensive pay gap analysis** - Earnings by occupation, gender, and qualification
+- `regional_income_trends` - **Regional economic patterns** - Income composition and growth trends by region
+- `industry_productivity_trends` - **Productivity performance** - Multi-factor productivity analysis with YoY changes
+- `economic_indicators_summary` - **Data coverage overview** - Summary of all economic datasets
+
+**Advanced Features:**
+- ✅ **45+ Years of Economic Data** - Comprehensive long-term trend analysis from 1979-2024
+- ✅ **Gender Pay Gap Analysis** - Detailed occupational equity assessment with AI insights
+- ✅ **Regional Economic Profiling** - Income composition, growth rates, and resilience scoring
+- ✅ **Industry Productivity Tracking** - Labour productivity, multifactor productivity, and capital contribution analysis
+- ✅ **AI-Powered Economic Assessment** - Cortex AI for regional development recommendations and policy insights
+
+**Sample Queries:** [`FOUNDATIONAL_socioeconomic_queries.sql`](sample_queries/FOUNDATIONAL_socioeconomic_queries.sql)
+- ✅ Gender pay gap analysis across all occupations with AI equity insights
+- ✅ Regional economic health monitoring and resilience scoring
+- ✅ Industry productivity trends and performance profiling
+- ✅ Economic forecasting and policy impact simulation
+- ✅ Cross-dataset integration with tourism, energy, and climate data
+- ✅ AI-powered economic development recommendations
 
 ---
 
@@ -244,6 +284,10 @@ nz-partner-hackathon/
 │   ├── complete_setup.sql                 # URU_RANGI database setup
 │   ├── setup_waita_marine.sql             # WAITA database setup
 │   ├── setup_cortex_fishing_documents.sql # RAG and document processing setup
+│   ├── setup_openfoodfacts.sql            # TIPUANUKU food database setup
+│   ├── load_openfoodfacts_simple.sql      # Open Food Facts data loading
+│   ├── setup_foundational.sql             # FOUNDATIONAL socio-economic database setup
+│   ├── load_foundational_data.sql         # Stats NZ income & productivity data loading
 │   ├── process_tide_data.py               # LINZ tide data processing
 │   ├── process_maritime_incidents.py      # Maritime incident data cleaning
 │   └── data_sharing_setup.sql             # Participant access management
@@ -251,7 +295,9 @@ nz-partner-hackathon/
     ├── URU_RANGI_wind_energy_queries.sql      # Energy AI examples (✅ tested)
     ├── WAIPUNA_RANGI_climate_queries.sql      # Water risk AI examples (✅ tested)
     ├── WAITA_marine_tide_queries.sql          # Marine AI + RAG examples (✅ tested)
-    ├── TIPUANUKU_food_agriculture_queries.sql # Food AI templates (🔄 ready for data)
+    ├── TIPUANUKU_food_agriculture_queries.sql # Food AI + image analysis (✅ tested)
+    ├── HIWA_I_TE_RANGI_tourism_events_queries.sql # Tourism AI examples (✅ tested)
+    ├── FOUNDATIONAL_socioeconomic_queries.sql # Economic AI + policy analysis (✅ tested)
     └── query_template.sql                     # Template for new themes
 ```
 

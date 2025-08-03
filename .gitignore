@@ -30,3 +30,5 @@ Thumbs.db
 processed_data/*_fixed.csv
 processed_data/*_final.csv
 processed_data/*_reordered.csv
+# Open Food Facts data - do not commit
+en.openfoodfacts.org.products.csv*
