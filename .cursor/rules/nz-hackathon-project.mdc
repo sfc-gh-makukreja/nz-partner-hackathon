@@ -1,0 +1,111 @@
+---
+alwaysApply: true
+description: NZ Partner Hackathon project structure and workflow guide
+---
+
+# NZ Partner Hackathon Project Structure
+
+## Project Overview
+This is a Snowflake-based hackathon project for New Zealand data themes, designed to provide participants with ready-to-use datasets and AI capabilities for building intelligent applications.
+
+## Core Architecture
+
+### Database Structure
+- **Database**: `nz_partner_hackathon`
+- **Schemas**: Based on Matariki themes (Māori star cluster)
+  - `URU_RANGI`: Wind, atmosphere, energy, climate data
+  - `WAIPUNA_RANGI`: Rain, temperature, flood, disaster data  
+  - `WAITĀ`: Marine, tide, fishing, maritime safety data
+  - `HIWA_I_TE_RANGI`: Future theme (aspirations, goals)
+  - `TIPUĀNUKU`: Future theme (growth, vegetation)
+  - `FOUNDATIONAL`: Socio-economic baseline data
+
+### File Organization
+
+```
+project-root/
+├── setup.sql                    # Database and schema initialization
+├── requirements.txt             # Python dependencies for data processing
+├── README.md                    # Project documentation and status
+├── data/                        # Raw datasets (CSV, Excel, PDF, GeoJSON)
+├── processed_data/              # Cleaned datasets ready for Snowflake
+├── scripts/                     # Processing and setup automation
+│   ├── process_*.py            # Python data cleaning scripts
+│   ├── setup_*.sql             # Snowflake schema setup scripts  
+│   └── run_*.sh                # Orchestration shell scripts
+└── sample_queries/              # Demo queries showing AI/data capabilities
+    ├── *_queries.sql           # Theme-specific query examples
+    └── query_template.sql      # Base template for new themes
+```
+
+## Development Workflow
+
+### 1. Data Processing Pipeline
+```bash
+# 1. Clean and process raw data
+uv run scripts/process_[theme]_data.py
+
+# 2. Set up Snowflake infrastructure  
+snow sql -f scripts/setup_[theme].sql --connection default
+
+# 3. Load processed data
+# (handled automatically by setup scripts)
+
+# 4. Test with sample queries
+snow sql -f sample_queries/[THEME]_queries.sql --connection default
+```
+
+### 2. Adding New Datasets
+1. Place raw data in `data/` directory
+2. Create processing script in `scripts/process_[name].py`
+3. Update schema setup in `scripts/setup_[theme].sql` 
+4. Add sample queries in `sample_queries/[THEME]_queries.sql`
+5. Update [README.md](mdc:README.md) with new dataset info
+
+### 3. Git Workflow
+- Follow [git-commit-messages](mdc:.cursor/rules/git-commit-messages.mdc) patterns
+- Use [snowflake-git-workflow](mdc:.cursor/rules/snowflake-git-workflow.mdc) for deployment
+- Test all queries before committing
+
+## Key Technologies
+
+### Snowflake Features Used
+- **Cortex AI Functions**: `COMPLETE`, `SEARCH_PREVIEW`, `PARSE_DOCUMENT`
+- **Data Types**: `VARIANT` (JSON), `GEOGRAPHY` (spatial), `TIMESTAMP`
+- **Stages**: For file uploads and PDF document storage
+- **Views**: For complex analytics and aggregations
+
+### Python Stack
+- **pandas**: Data manipulation and cleaning
+- **requests**: API data fetching  
+- **snowflake-connector-python**: Database connectivity
+- **uv**: Fast Python package management
+
+## Hackathon Participant Focus
+
+### What's Pre-built
+- ✅ Database schemas and tables
+- ✅ Cleaned, loaded datasets  
+- ✅ AI-ready document processing (RAG)
+- ✅ Sample queries demonstrating capabilities
+- ✅ Snowflake connection setup
+
+### What Participants Build
+- 🏗️ Streamlit applications
+- 🏗️ Custom AI/ML models using Cortex
+- 🏗️ Interactive dashboards and visualizations
+- 🏗️ Business logic and user experiences
+- 🏗️ API integrations and real-time features
+
+### Success Metrics
+- **Time to Value**: Participants can query data immediately
+- **AI Integration**: RAG, classification, and generation capabilities ready
+- **Scalability**: Multi-tenant sharing via Snowflake data sharing
+- **Innovation**: Focus on application logic, not data plumbing
+
+## Integration Points
+
+This project integrates with existing rules:
+- [snowflake-development](mdc:.cursor/rules/snowflake-development.mdc): Core Snowflake patterns
+- [snowflake-ai-image-processing](mdc:.cursor/rules/snowflake-ai-image-processing.mdc): AI capabilities
+- [stage-separation-concerns](mdc:.cursor/rules/stage-separation-concerns.mdc): Architecture patterns

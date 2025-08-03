@@ -1,0 +1,312 @@
+---
+description: Snowflake RAG and Cortex AI integration patterns for document processing
+globs: scripts/setup_cortex_*.sql,sample_queries/*_queries.sql
+---
+
+# Snowflake RAG and Cortex AI Integration Patterns
+
+## RAG Architecture Components
+
+### 1. Document Processing Pipeline
+```sql
+-- Stage for uncompressed PDFs (CRITICAL: AUTO_COMPRESS=FALSE)
+CREATE OR REPLACE STAGE document_stage
+    DIRECTORY = (ENABLE = TRUE)
+    ENCRYPTION = (TYPE = 'SNOWFLAKE_SSE');
+
+-- Upload PDFs without compression
+PUT file://data/documents/*.pdf @document_stage AUTO_COMPRESS=FALSE;
+
+-- Document storage table
+CREATE TABLE documents (
+    document_id STRING PRIMARY KEY,
+    file_name STRING,
+    file_path STRING,
+    region STRING,
+    parsed_text VARIANT,
+    page_count NUMBER,
+    processing_status STRING,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP()
+);
+```
+
+### 2. Text Parsing with PARSE_DOCUMENT
+```sql
+-- Parse PDFs using Cortex PARSE_DOCUMENT
+INSERT INTO documents (document_id, file_name, file_path, region, parsed_text, processing_status)
+SELECT 
+    'doc-' || SEQ8() as document_id,
+    'filename.pdf',
+    '@document_stage/filename.pdf',
+    'Auckland',
+    SNOWFLAKE.CORTEX.PARSE_DOCUMENT(@document_stage, 'filename.pdf', {'mode': 'LAYOUT'}),
+    'PROCESSING';
+
+-- Update metadata after parsing
+UPDATE documents 
+SET 
+    page_count = parsed_text:metadata:pageCount::NUMBER,
+    processing_status = CASE 
+        WHEN parsed_text IS NOT NULL AND LENGTH(parsed_text:content::STRING) > 100 
+        THEN 'SUCCESS' 
+        ELSE 'FAILED' 
+    END
+WHERE processing_status = 'PROCESSING';
+```
+
+### 3. Text Chunking with SPLIT_TEXT_RECURSIVE_CHARACTER
+```sql
+-- Chunk table for Cortex Search indexing
+CREATE TABLE document_chunks (
+    chunk_id STRING PRIMARY KEY,
+    document_id STRING,
+    chunk_sequence NUMBER,
+    chunk_text STRING,
+    chunk_length NUMBER,
+    region STRING,
+    FOREIGN KEY (document_id) REFERENCES documents(document_id)
+);
+
+-- Create chunks from parsed documents
+INSERT INTO document_chunks
+SELECT 
+    document_id || '-chunk-' || c.INDEX as chunk_id,
+    fd.document_id,
+    c.INDEX as chunk_sequence,  -- Use INDEX for proper 0-based sequencing
+    c.VALUE::STRING as chunk_text,
+    LENGTH(c.VALUE::STRING) as chunk_length,
+    fd.region
+FROM documents fd,
+LATERAL FLATTEN(
+    input => SNOWFLAKE.CORTEX.SPLIT_TEXT_RECURSIVE_CHARACTER(
+        fd.parsed_text:content::STRING,
+        'markdown',      -- chunk_type: 'markdown', 'text', 'html'
+        512,            -- max_chunk_size
+        50              -- overlap_size
+    )
+) c
+WHERE fd.processing_status = 'SUCCESS'
+AND LENGTH(TRIM(c.VALUE::STRING)) > 50;  -- Filter out short chunks
+```
+
+### 4. Cortex Search Service Creation
+```sql
+-- Create Cortex Search Service for semantic search
+CREATE CORTEX SEARCH SERVICE document_search_service
+ON chunk_text
+ATTRIBUTES region, document_id, chunk_sequence
+WAREHOUSE = COMPUTE_WH
+TARGET_LAG = '1 minute'
+AS (
+    SELECT 
+        chunk_text,
+        region,
+        document_id,
+        chunk_sequence
+    FROM document_chunks
+);
+```
+
+## RAG Query Patterns
+
+### 1. Basic Semantic Search
+```sql
+-- Simple document search
+SELECT PARSE_JSON(
+    SNOWFLAKE.CORTEX.SEARCH_PREVIEW(
+        'document_search_service',
+        '{
+            "query": "natural language question",
+            "columns": ["chunk_text", "region", "document_id"],
+            "limit": 5
+        }'
+    )
+)['results'] as search_results;
+```
+
+### 2. Filtered Search with Metadata
+```sql
+-- Region-specific search
+SELECT PARSE_JSON(
+    SNOWFLAKE.CORTEX.SEARCH_PREVIEW(
+        'document_search_service',
+        '{
+            "query": "specific topic or question",
+            "columns": ["chunk_text", "region"],
+            "filter": {"@eq": {"region": "Auckland"}},
+            "limit": 3
+        }'
+    )
+)['results'] as filtered_results;
+```
+
+### 3. RAG with AI Synthesis
+```sql
+-- Complete RAG pattern: Search + Generate
+WITH user_query AS (
+    SELECT 'User question here' as question
+),
+search_results AS (
+    SELECT 
+        uq.question,
+        PARSE_JSON(
+            SNOWFLAKE.CORTEX.SEARCH_PREVIEW(
+                'document_search_service',
+                '{"query": "search terms", "columns": ["chunk_text"], "limit": 3}'
+            )
+        )['results'] as relevant_chunks
+    FROM user_query uq
+),
+context_preparation AS (
+    SELECT 
+        sr.question,
+        ARRAY_TO_STRING(
+            ARRAY_AGG(chunk.value:chunk_text::STRING) WITHIN GROUP (ORDER BY chunk.index),
+            '\n\n---DOCUMENT SECTION---\n\n'
+        ) as combined_context
+    FROM search_results sr,
+    LATERAL FLATTEN(input => sr.relevant_chunks) chunk
+    GROUP BY sr.question
+)
+SELECT 
+    question,
+    SNOWFLAKE.CORTEX.COMPLETE(
+        'mistral-large2',
+        PROMPT(
+            'Based on the following documents, answer the question: {0}
+
+CONTEXT:
+{1}
+
+Provide a comprehensive answer with specific references to the source material.',
+            question,
+            combined_context
+        )
+    ) as ai_response
+FROM context_preparation;
+```
+
+### 4. Multi-Source RAG Integration
+```sql
+-- RAG + Real-time Data Integration
+WITH document_context AS (
+    -- Get relevant documents
+    SELECT /* RAG search results */ 
+),
+real_time_data AS (
+    -- Get current conditions/data
+    SELECT current_value, location FROM live_data_table
+),
+combined_analysis AS (
+    SELECT 
+        dc.document_context,
+        rtd.current_value,
+        rtd.location
+    FROM document_context dc
+    CROSS JOIN real_time_data rtd
+)
+SELECT 
+    SNOWFLAKE.CORTEX.COMPLETE(
+        'mistral-large2',
+        PROMPT(
+            'Combine regulatory guidance with current conditions: {0} + {1} for location {2}',
+            document_context,
+            current_value,
+            location
+        )
+    ) as intelligent_recommendation
+FROM combined_analysis;
+```
+
+## Common Patterns and Best Practices
+
+### LATERAL FLATTEN Syntax
+```sql
+-- CORRECT: Join with LATERAL FLATTEN
+FROM base_table bt
+JOIN LATERAL FLATTEN(input => bt.json_column) f ON TRUE
+
+-- INCORRECT: LATERAL FLATTEN cannot be on left side
+FROM base_table bt,
+LATERAL FLATTEN(input => bt.json_column) f
+CROSS JOIN other_table ot  -- This fails!
+```
+
+### Error Handling in RAG
+```sql
+-- Defensive RAG queries
+WITH safe_search AS (
+    SELECT 
+        CASE 
+            WHEN search_service_exists 
+            THEN SNOWFLAKE.CORTEX.SEARCH_PREVIEW('service', query)
+            ELSE '{"results": []}'  -- Fallback for missing service
+        END as search_result
+    FROM (SELECT TRUE as search_service_exists)  -- Add actual check
+)
+SELECT 
+    COALESCE(
+        SNOWFLAKE.CORTEX.COMPLETE('model', prompt),
+        'AI service temporarily unavailable'  -- Fallback response
+    ) as response
+FROM safe_search;
+```
+
+### Prompt Engineering with PROMPT Function
+```sql
+-- Structured prompts using PROMPT function
+SELECT 
+    SNOWFLAKE.CORTEX.COMPLETE(
+        'mistral-large2',
+        PROMPT(
+            'You are a {0} expert. Answer this question: {1}
+            
+CONTEXT: {2}
+
+INSTRUCTIONS:
+1. Provide specific, actionable advice
+2. Reference source material when applicable  
+3. Include safety considerations if relevant
+4. Format response clearly
+
+Answer:',
+            domain_expertise,
+            user_question,
+            relevant_context
+        )
+    ) as expert_response;
+```
+
+### Token Management
+```sql
+-- Check token usage for cost optimization
+SELECT 
+    chunk_text,
+    SNOWFLAKE.CORTEX.COUNT_TOKENS('mistral-large2', chunk_text) as token_count
+FROM document_chunks
+WHERE token_count > 500  -- Identify large chunks
+ORDER BY token_count DESC;
+```
+
+## Integration with Project Architecture
+
+### Schema Organization
+- **Documents**: Store in theme-specific schemas (`WAITĀ`, `URU_RANGI`, etc.)
+- **Search Services**: Named with clear purpose (`fishing_regulations_search`)
+- **Chunks**: Include theme/region metadata for filtering
+
+### Performance Optimization
+- **Chunk Size**: 512 tokens optimal for most use cases
+- **Overlap**: 50-100 tokens for context preservation
+- **Search Limits**: 3-5 results for focused responses
+- **Warehouse**: Use appropriate size for document processing
+
+### Security and Access
+- **Stages**: Use Snowflake SSE encryption
+- **Services**: Grant appropriate roles access to Cortex Search
+- **Data**: Consider row-level security for sensitive documents
+
+This integrates with:
+- [snowflake-development](mdc:.cursor/rules/snowflake-development.mdc): Core SQL patterns
+- [nz-hackathon-project](mdc:.cursor/rules/nz-hackathon-project.mdc): Project structure
+- [nz-sample-queries](mdc:.cursor/rules/nz-sample-queries.mdc): Query demonstrations

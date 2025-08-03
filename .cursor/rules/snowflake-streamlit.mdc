@@ -1,56 +1,308 @@
 ---
-globs: streamlit_app.py,environment.yml,snowflake.yml
 description: Snowflake Streamlit development best practices
 ---
 
-# Snowflake Streamlit Development Rules
+# Snowflake Streamlit Development Best Practices
 
-## Environment Configuration
+## Project Structure for Streamlit Apps
 
-### environment.yml Best Practices
-- **NEVER use pip packages** in environment.yml for Streamlit in Snowflake
-- Only use packages from the **Snowflake Anaconda Channel**
-- Always include required structure:
-  ```yaml
-  name: sf_env
-  channels:
-    - snowflake
-  dependencies:
-    - streamlit>=1.28.0
-    - pandas>=1.5.0
-    - pillow>=9.0.0
-    # Add other packages from Snowflake channel only
-  ```
+### Recommended File Organization
+```
+streamlit_apps/
+├── fishing_assistant/
+│   ├── app.py                 # Main Streamlit application
+│   ├── queries.sql           # SQL queries used by the app
+│   ├── requirements.txt      # Python dependencies
+│   └── README.md            # App documentation
+├── marine_safety_dashboard/
+└── climate_explorer/
+```
 
-### snowflake.yml Configuration
-- **Always use definition_version: 2** for CLI v3.10.0+
-- Use **entities** structure (not direct streamlit config):
-  ```yaml
-  definition_version: 2
-  entities:
-    app_name:
-      type: streamlit
-      identifier: app_name
-      stage: app_stage
-      query_warehouse: WAREHOUSE_NAME
-      title: "App Title"
-      main_file: streamlit_app.py
-      artifacts:
-        - streamlit_app.py
-        - environment.yml
-  ```
+## Streamlit App Architecture
 
-## Snowflake CLI Connection
-- **Always use default connection**: `--connection default`
-- Test connection before deployment: `snow connection test --connection default`
-- Deploy command: `snow streamlit deploy --connection default`
+### Standard App Template
+```python
+import streamlit as st
+import snowflake.connector
+import pandas as pd
+from datetime import datetime, timedelta
 
-## Cortex AISQL Integration
-- Use `st.connection("snowflake").session()` for Snowflake session
-- Cortex functions: `SNOWFLAKE.CORTEX.COMPLETE()`, `AI_CLASSIFY()`, `AI_FILTER()`
-- Always include error handling for AI functions with fallback options
+# App configuration
+st.set_page_config(
+    page_title="NZ Hackathon App",
+    page_icon="🇳🇿",
+    layout="wide"
+)
 
-## Database Best Practices
-- Create tables with `CREATE TABLE IF NOT EXISTS`
-- Use VARIANT data type for flexible JSON storage
-- Include session tracking and analytics tables for booth/demo apps
+# Snowflake connection
+@st.cache_resource
+def init_connection():
+    return snowflake.connector.connect(**st.secrets["snowflake"])
+
+# Data loading with caching
+@st.cache_data(ttl=600)  # Cache for 10 minutes
+def load_data(query):
+    conn = init_connection()
+    return pd.read_sql(query, conn)
+
+# Main app logic
+def main():
+    st.title("🎣 Fishing Assistant")
+    
+    # Sidebar for user inputs
+    with st.sidebar:
+        location = st.selectbox("Select Location", ["Auckland", "Wellington", "Christchurch"])
+        species = st.selectbox("Target Species", ["Snapper", "Kahawai", "Gurnard"])
+        
+    # Main content area
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Fishing Regulations")
+        # RAG query results here
+        
+    with col2:
+        st.subheader("Tide Predictions")
+        # Tide data visualization here
+
+if __name__ == "__main__":
+    main()
+```
+
+## Snowflake Integration Patterns
+
+### Secure Connection Management
+```python
+# Use Streamlit secrets for credentials
+# .streamlit/secrets.toml
+[snowflake]
+user = "your_username"
+password = "your_password"
+account = "your_account"
+warehouse = "COMPUTE_WH"
+database = "nz_partner_hackathon"
+schema = "WAITA"
+```
+
+### Efficient Data Loading
+```python
+# Cache expensive queries
+@st.cache_data(ttl=3600)  # Cache for 1 hour
+def get_tide_predictions(location, start_date, end_date):
+    query = f"""
+    SELECT date, tide_time, tide_height_m
+    FROM tide_predictions 
+    WHERE port_name = '{location}'
+    AND date BETWEEN '{start_date}' AND '{end_date}'
+    ORDER BY date, tide_time
+    """
+    return load_data(query)
+
+# Use session state for user data
+if 'user_location' not in st.session_state:
+    st.session_state.user_location = 'Auckland'
+```
+
+## RAG Integration in Streamlit
+
+### Document Q&A Interface
+```python
+def fishing_regulations_qa():
+    st.subheader("Ask about Fishing Regulations")
+    
+    user_question = st.text_input("Enter your fishing question:")
+    
+    if user_question:
+        # RAG query to Snowflake
+        rag_query = f"""
+        WITH search_results AS (
+            SELECT PARSE_JSON(
+                SNOWFLAKE.CORTEX.SEARCH_PREVIEW(
+                    'fishing_regulations_search',
+                    '{{"query": "{user_question}", "columns": ["chunk_text", "nz_region"], "limit": 3}}'
+                )
+            )['results'] as results
+        )
+        SELECT 
+            SNOWFLAKE.CORTEX.COMPLETE(
+                'mistral-large2',
+                'Based on these fishing regulations: ' || 
+                ARRAY_TO_STRING(ARRAY_AGG(r.value:chunk_text::STRING), '\\n\\n') ||
+                '\\n\\nQuestion: {user_question}\\n\\nAnswer:'
+            ) as answer
+        FROM search_results,
+        LATERAL FLATTEN(input => results) r
+        """
+        
+        result = load_data(rag_query)
+        if not result.empty:
+            st.write("**Answer:**", result.iloc[0]['ANSWER'])
+```
+
+## Data Visualization Best Practices
+
+### Interactive Charts with Plotly
+```python
+import plotly.express as px
+import plotly.graph_objects as go
+
+def create_tide_chart(tide_data):
+    fig = go.Figure()
+    
+    fig.add_trace(go.Scatter(
+        x=tide_data['TIDE_TIME'],
+        y=tide_data['TIDE_HEIGHT_M'],
+        mode='lines+markers',
+        name='Tide Height',
+        line=dict(color='blue', width=2)
+    ))
+    
+    fig.update_layout(
+        title="Tide Predictions",
+        xaxis_title="Time",
+        yaxis_title="Height (meters)",
+        hovermode='x unified'
+    )
+    
+    return fig
+
+# Display chart
+st.plotly_chart(create_tide_chart(tide_data), use_container_width=True)
+```
+
+### Geographic Data with Maps
+```python
+# Display ports on map using Snowflake GEOGRAPHY data
+def create_port_map(port_data):
+    # Convert GEOGRAPHY to lat/lon for Streamlit
+    port_data['lat'] = port_data['LOCATION_POINT'].apply(lambda x: float(x.split(' ')[1][:-1]))
+    port_data['lon'] = port_data['LOCATION_POINT'].apply(lambda x: float(x.split(' ')[0][6:]))
+    
+    st.map(port_data[['lat', 'lon']])
+```
+
+## User Experience Patterns
+
+### Progressive Disclosure
+```python
+# Start simple, add complexity progressively
+def create_basic_interface():
+    st.write("Choose your fishing preferences:")
+    
+    # Basic options
+    location = st.selectbox("Location", locations)
+    
+    # Advanced options in expander
+    with st.expander("Advanced Options"):
+        date_range = st.date_input("Date Range", value=[datetime.now(), datetime.now() + timedelta(days=7)])
+        tide_preference = st.radio("Tide Preference", ["High Tide", "Low Tide", "Any"])
+```
+
+### Real-time Updates
+```python
+# Auto-refresh data
+def enable_auto_refresh():
+    if st.checkbox("Enable Auto-refresh"):
+        # Rerun every 5 minutes
+        time.sleep(300)
+        st.rerun()
+```
+
+## Performance Optimization
+
+### Efficient State Management
+```python
+# Use session state for expensive computations
+if 'tide_analysis' not in st.session_state:
+    with st.spinner("Analyzing tide patterns..."):
+        st.session_state.tide_analysis = perform_tide_analysis()
+
+# Display cached result
+st.write(st.session_state.tide_analysis)
+```
+
+### Lazy Loading
+```python
+# Load data only when needed
+def load_detailed_data():
+    if st.button("Load Detailed Analysis"):
+        with st.spinner("Loading..."):
+            detailed_data = load_data(complex_query)
+            st.dataframe(detailed_data)
+```
+
+## Deployment Considerations
+
+### Streamlit Cloud Configuration
+```toml
+# .streamlit/config.toml
+[theme]
+primaryColor = "#1f77b4"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f0f2f6"
+textColor = "#262730"
+
+[server]
+maxUploadSize = 200
+enableCORS = false
+```
+
+### Error Handling
+```python
+def safe_query_execution(query):
+    try:
+        return load_data(query)
+    except Exception as e:
+        st.error(f"Query failed: {str(e)}")
+        st.info("Please check your connection and try again.")
+        return pd.DataFrame()
+```
+
+## Common Streamlit + Snowflake Patterns
+
+### Multi-Page Applications
+```python
+# Use st.navigation for multi-page apps
+pages = {
+    "🏠 Home": home_page,
+    "🎣 Fishing Planner": fishing_page,
+    "🌊 Tide Analysis": tide_page,
+    "📊 Safety Dashboard": safety_page
+}
+
+selected_page = st.sidebar.selectbox("Navigate to:", list(pages.keys()))
+pages[selected_page]()
+```
+
+### Data Export Features
+```python
+def add_export_functionality(dataframe):
+    if not dataframe.empty:
+        csv = dataframe.to_csv(index=False)
+        st.download_button(
+            label="Download data as CSV",
+            data=csv,
+            file_name=f"fishing_data_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime='text/csv'
+        )
+```
+
+## Hackathon-Specific Tips
+
+### Rapid Prototyping
+- Start with `st.write()` for quick data display
+- Use `st.json()` for debugging API responses
+- Leverage `st.code()` to show SQL queries to users
+- Use `st.experimental_fragment` for partial updates
+
+### Demo-Ready Features
+- Add loading spinners for better UX
+- Include data source attribution
+- Provide example questions for RAG interfaces
+- Add "About" section explaining the data sources
+
+### Scalability Considerations
+- Use Snowflake's `LIMIT` clause for large datasets
+- Implement pagination for large result sets
+- Cache intermediate results in session state
+- Consider using Snowflake's data sharing for team collaboration

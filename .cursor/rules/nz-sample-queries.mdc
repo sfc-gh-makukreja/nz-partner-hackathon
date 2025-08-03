@@ -1,0 +1,274 @@
+---
+description: Sample query patterns for demonstrating Snowflake capabilities to hackathon participants
+globs: sample_queries/*.sql
+---
+
+# NZ Hackathon Sample Query Patterns
+
+## Purpose and Goals
+
+Sample queries serve as **capability demonstrations** for hackathon participants, showing:
+- ✅ **Data Integration**: Multi-source queries combining different datasets
+- ✅ **AI Functions**: Cortex AI for text generation, search, and analysis
+- ✅ **Geospatial Analysis**: Location-based insights using GEOGRAPHY data types
+- ✅ **Time Series**: Trend analysis and forecasting patterns
+- ✅ **RAG (Retrieval Augmented Generation)**: Document search + AI synthesis
+
+## File Structure Pattern
+
+### Standard Template ([query_template.sql](mdc:sample_queries/query_template.sql))
+```sql
+-- =============================================
+-- [THEME] SAMPLE QUERIES
+-- Theme: [Description of the theme]
+-- =============================================
+
+-- Table of Contents:
+-- 1. Basic Data Exploration
+-- 2. Time Series Analysis  
+-- 3. Geospatial Analysis
+-- 4. AI-Powered Insights
+-- 5. Complex Multi-Source Integration
+-- 6. POTENTIAL PROJECT IDEAS
+
+USE ROLE ACCOUNTADMIN;
+USE DATABASE nz_partner_hackathon;
+USE SCHEMA [THEME];
+
+-- =============================================
+-- 1. BASIC DATA EXPLORATION
+-- =============================================
+
+-- Data overview and quality checks
+SELECT 
+    'table_name' as dataset,
+    COUNT(*) as total_records,
+    MIN(date_column) as earliest_date,
+    MAX(date_column) as latest_date
+FROM table_name;
+
+-- ... (additional sections)
+
+/*
+POTENTIAL AI/ML PROJECT IDEAS:
+- [Specific application ideas for this theme]
+- [Integration opportunities with other themes]
+- [Streamlit app concepts]
+*/
+```
+
+## Query Pattern Categories
+
+### 1. Basic Data Exploration
+**Purpose**: Help participants understand available data
+```sql
+-- Data coverage and completeness
+SELECT 
+    DATE_TRUNC('month', date_column) as month,
+    COUNT(*) as records,
+    COUNT(DISTINCT location) as unique_locations,
+    AVG(numeric_value) as avg_value
+FROM dataset
+GROUP BY month
+ORDER BY month;
+```
+
+### 2. Time Series Analysis
+**Purpose**: Demonstrate temporal patterns and forecasting potential
+```sql
+-- Trend analysis with window functions
+SELECT 
+    date_column,
+    value,
+    AVG(value) OVER (ORDER BY date_column ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) as moving_avg_7day,
+    LAG(value, 365) OVER (ORDER BY date_column) as same_day_last_year,
+    value - LAG(value, 365) OVER (ORDER BY date_column) as year_over_year_change
+FROM time_series_data
+ORDER BY date_column;
+```
+
+### 3. Geospatial Analysis
+**Purpose**: Show location-based insights and spatial relationships
+```sql
+-- Distance-based analysis
+SELECT 
+    a.location_name,
+    b.location_name,
+    ST_DISTANCE(a.location_point, b.location_point) / 1000 as distance_km,
+    CASE 
+        WHEN ST_DISTANCE(a.location_point, b.location_point) < 10000 THEN 'Close'
+        WHEN ST_DISTANCE(a.location_point, b.location_point) < 50000 THEN 'Moderate'
+        ELSE 'Far' 
+    END as proximity_category
+FROM locations a
+CROSS JOIN locations b
+WHERE a.location_name != b.location_name;
+```
+
+### 4. AI-Powered Insights
+**Purpose**: Showcase Cortex AI functions for intelligent analysis
+
+#### Text Generation
+```sql
+-- AI-powered data summarization
+SELECT 
+    SNOWFLAKE.CORTEX.COMPLETE(
+        'mistral-large2',
+        PROMPT(
+            'Analyze this data summary: {0}. Provide insights about trends and recommendations.',
+            summary_stats
+        )
+    ) as ai_insights
+FROM (SELECT CONCAT('Records: ', COUNT(*), ', Avg: ', AVG(value)) as summary_stats FROM dataset);
+```
+
+#### Search and Retrieval
+```sql
+-- Semantic search through documents
+SELECT PARSE_JSON(
+    SNOWFLAKE.CORTEX.SEARCH_PREVIEW(
+        'document_search_service',
+        '{
+            "query": "natural language question",
+            "columns": ["text_content", "metadata"],
+            "limit": 5
+        }'
+    )
+)['results'] as search_results;
+```
+
+### 5. Complex Multi-Source Integration
+**Purpose**: Demonstrate the power of combining multiple datasets
+
+#### Cross-Schema Analysis
+```sql
+-- Combine data from multiple themes
+WITH theme1_data AS (
+    SELECT location, date, value1 FROM nz_partner_hackathon.URU_RANGI.dataset1
+),
+theme2_data AS (
+    SELECT location, date, value2 FROM nz_partner_hackathon.WAIPUNA_RANGI.dataset2
+)
+SELECT 
+    t1.location,
+    t1.date,
+    t1.value1,
+    t2.value2,
+    CORR(t1.value1, t2.value2) OVER (PARTITION BY t1.location) as correlation
+FROM theme1_data t1
+JOIN theme2_data t2 ON t1.location = t2.location AND t1.date = t2.date;
+```
+
+#### RAG + Real-time Data Integration
+```sql
+-- COMPLETE EXAMPLE: AI assistant with multiple data sources
+WITH user_query AS (
+    SELECT 'What are the regulations and current conditions for [activity] in [location]?' as question
+),
+regulation_search AS (
+    -- RAG: Search relevant documents
+    SELECT PARSE_JSON(
+        SNOWFLAKE.CORTEX.SEARCH_PREVIEW('doc_search', '{"query": "regulations", "limit": 3}')
+    )['results'] as regulations
+),
+current_conditions AS (
+    -- Real-time data query
+    SELECT condition_value, location FROM real_time_data WHERE date = CURRENT_DATE()
+)
+SELECT 
+    SNOWFLAKE.CORTEX.COMPLETE(
+        'mistral-large2',
+        PROMPT(
+            'User Question: {0}\nRegulations: {1}\nCurrent Conditions: {2}\nProvide comprehensive advice.',
+            uq.question,
+            rs.regulations,
+            cc.condition_value
+        )
+    ) as intelligent_response
+FROM user_query uq
+CROSS JOIN regulation_search rs
+CROSS JOIN current_conditions cc;
+```
+
+## Documentation Standards
+
+### Query Comments
+```sql
+-- =============================================
+-- SECTION: Descriptive Name
+-- Purpose: What this demonstrates
+-- Complexity: Basic/Intermediate/Advanced
+-- =============================================
+```
+
+### Inline Explanations
+```sql
+SELECT 
+    column1,
+    -- Business logic explanation
+    CASE WHEN condition THEN 'meaning' ELSE 'other_meaning' END as interpreted_value,
+    -- Technical explanation of calculation
+    LAG(value) OVER (ORDER BY date) as previous_value
+FROM table;
+```
+
+### Project Ideas Section
+```sql
+/*
+POTENTIAL AI/ML PROJECT IDEAS:
+
+🎯 FEATURED: [Main application concept]
+   =========================================
+   [Detailed description of the flagship idea]
+   
+   Key Features:
+   * [Feature 1 with technical approach]
+   * [Feature 2 with data sources]
+   * [Feature 3 with AI integration]
+
+📊 DATA VISUALIZATION IDEAS:
+   - [Interactive dashboard concepts]
+   - [Chart types and insights]
+
+🤖 AI/ML OPPORTUNITIES:
+   - [Predictive modeling ideas]
+   - [Classification tasks]
+   - [Recommendation systems]
+
+🔗 INTEGRATION POSSIBILITIES:
+   - [External API connections]
+   - [Cross-theme data combinations]
+   - [Real-time data streams]
+
+💡 INNOVATION CHALLENGES:
+   - [Advanced technical challenges]
+   - [Novel use cases]
+   - [Social impact applications]
+*/
+```
+
+## Best Practices
+
+### 1. Participant Experience
+- **Start Simple**: Basic queries first, then complexity builds
+- **Clear Comments**: Every query section explained
+- **Realistic Data**: Use actual meaningful subsets
+- **Error Handling**: Show defensive SQL patterns
+
+### 2. Technical Quality
+- **Performance**: Optimize for demo speed (LIMIT clauses)
+- **Readability**: Consistent formatting and naming
+- **Modularity**: CTEs for complex logic breakdown
+- **Validation**: Include data quality checks
+
+### 3. Innovation Inspiration
+- **Concrete Examples**: Specific app ideas, not generic suggestions
+- **Technical Depth**: Show actual implementation approaches
+- **Business Value**: Connect features to real-world benefits
+- **Scalability**: Hint at production considerations
+
+## Integration with Project Rules
+
+- Follow [snowflake-development](mdc:.cursor/rules/snowflake-development.mdc) for SQL best practices
+- Apply [nz-hackathon-project](mdc:.cursor/rules/nz-hackathon-project.mdc) structure guidelines
+- Use [nz-data-processing](mdc:.cursor/rules/nz-data-processing.mdc) patterns for data references

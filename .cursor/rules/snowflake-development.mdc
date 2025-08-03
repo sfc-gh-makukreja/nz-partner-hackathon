@@ -1,61 +1,200 @@
 ---
-globs: *.py,*.sql,*.yml
 description: General Snowflake development best practices and patterns
+globs: *.sql,scripts/setup_*.sql,scripts/run_*.sh
 ---
 
 # Snowflake Development Best Practices
 
-## Connection Management
-- **Always use named connections** with Snowflake CLI: `--connection default`
-- Test connections before deployment: `snow connection test --connection default`
-- Use `st.connection("snowflake").session()` in Streamlit apps
-- Handle connection errors gracefully with try/catch blocks
+## SQL Script Structure
 
-## Cortex AI Functions
-### Supported Functions
-- `SNOWFLAKE.CORTEX.COMPLETE()` - Text generation and completion
-- `SNOWFLAKE.CORTEX.CLASSIFY()` - Classification tasks
-- `SNOWFLAKE.CORTEX.FILTER()` - Content filtering
-- `SNOWFLAKE.CORTEX.SIMILARITY()` - Semantic similarity
+### Standard Header
+```sql
+-- =============================================
+-- [SCRIPT_NAME]: [Purpose]
+-- Theme: [MATARIKI_THEME]
+-- Dependencies: [list dependencies]
+-- =============================================
 
-### Best Practices
-- **Always include fallback logic** for AI function failures
-- **Optimize prompts** for cost-effectiveness (shorter = cheaper)
-- **Use appropriate models**: mixtral-8x7b for general tasks
-- **Include token limits** in COMPLETE functions (e.g., 100-500 tokens)
-- **Sanitize inputs** before passing to AI functions
+USE ROLE ACCOUNTADMIN;
+USE DATABASE nz_partner_hackathon;
+USE SCHEMA [THEME_SCHEMA];
+USE WAREHOUSE COMPUTE_WH;
+```
 
-## Database Design
-### Tables
-- Use `CREATE TABLE IF NOT EXISTS` for idempotent operations
-- Include `TIMESTAMP` columns for tracking (created_at, updated_at)
-- Use `VARIANT` data type for flexible JSON storage
-- Add proper primary keys and indexes
+### Error Handling Patterns
+```sql
+-- Always use IF NOT EXISTS for idempotent operations
+CREATE SCHEMA IF NOT EXISTS schema_name;
+CREATE TABLE IF NOT EXISTS table_name;
 
-### Data Types
-- `STRING` for text (preferred over VARCHAR)
-- `VARIANT` for JSON/object data
-- `TIMESTAMP` for datetime values
-- `NUMBER` for numeric values
+-- Use TRY_CAST for safe data type conversions
+TRY_CAST(column AS NUMBER) AS numeric_column
 
-## Error Handling
-```python
-try:
-    result = session.sql("SELECT SNOWFLAKE.CORTEX.COMPLETE(...)").collect()
-    return result[0]['RESPONSE']
-except Exception as e:
-    st.error(f"AI function failed: {e}")
-    return fallback_response
+-- Handle potential NULL values with COALESCE
+COALESCE(parsed_data:field::STRING, 'default_value') AS field_value
+```
+
+## Data Loading Patterns
+
+### File Format Standards
+```sql
+CREATE OR REPLACE FILE FORMAT [theme]_csv_format
+    TYPE = 'CSV'
+    FIELD_DELIMITER = ','
+    RECORD_DELIMITER = '\n'
+    SKIP_HEADER = 1
+    FIELD_OPTIONALLY_ENCLOSED_BY = '"'
+    TRIM_SPACE = TRUE
+    ERROR_ON_COLUMN_COUNT_MISMATCH = FALSE
+    REPLACE_INVALID_CHARACTERS = TRUE
+    DATE_FORMAT = 'AUTO'
+    TIME_FORMAT = 'AUTO'
+    TIMESTAMP_FORMAT = 'AUTO';
+```
+
+### Stage Creation
+```sql
+CREATE OR REPLACE STAGE [theme]_stage
+    FILE_FORMAT = [theme]_csv_format
+    COMMENT = 'Stage for [theme] data files';
+```
+
+### Robust COPY INTO Pattern
+```sql
+-- Use SELECT syntax for INSERT with COPY INTO for flexibility
+INSERT INTO target_table (col1, col2, col3)
+SELECT 
+    TRY_CAST($1 AS STRING) AS col1,
+    TRY_CAST($2 AS NUMBER) AS col2,
+    TRY_CAST($3 AS TIMESTAMP) AS col3
+FROM (
+    SELECT *
+    FROM @[theme]_stage/[filename]
+    (FILE_FORMAT => [theme]_csv_format)
+);
 ```
 
 ## Performance Optimization
-- **Use appropriate warehouses** for workload size
-- **Implement caching** for repeated AI calls
-- **Batch operations** when possible
-- **Monitor compute costs** especially for AI functions
 
-## Security
-- **Never expose credentials** in code
-- **Use stages** for file uploads in production
-- **Implement proper role-based access** (RBAC)
-- **Validate user inputs** before database operations
+### Clustering and Partitioning
+```sql
+-- Use clustering for frequently filtered columns
+CREATE TABLE table_name (...) 
+CLUSTER BY (date_column, region_column);
+
+-- Partition large tables by date ranges
+WHERE date_column BETWEEN '2024-01-01' AND '2024-12-31'
+```
+
+### Efficient Aggregations
+```sql
+-- Use QUALIFY for window function filtering (more efficient than subqueries)
+SELECT *, ROW_NUMBER() OVER (PARTITION BY group_col ORDER BY rank_col) as rn
+FROM table_name
+QUALIFY rn = 1;
+
+-- Use APPROX_COUNT_DISTINCT for large datasets
+SELECT APPROX_COUNT_DISTINCT(column) FROM large_table;
+```
+
+## Geospatial Best Practices
+
+### GEOGRAPHY Data Type Usage
+```sql
+-- Convert coordinates to GEOGRAPHY
+TO_GEOGRAPHY('POINT(' || longitude || ' ' || latitude || ')') AS location_point
+
+-- Spatial filtering with ST_DWITHIN (meters)
+WHERE ST_DWITHIN(location1, location2, 1000) -- Within 1km
+
+-- Extract coordinates from GEOGRAPHY
+ST_X(location_point) AS longitude,
+ST_Y(location_point) AS latitude
+```
+
+## AI/ML Integration Patterns
+
+### Cortex Function Standards
+```sql
+-- Use appropriate models for different tasks
+-- For general completion: 'mistral-large2', 'llama3.1-70b'
+-- For embeddings: 'snowflake-arctic-embed-l-v2.0'
+-- For classification: 'mistral-7b'
+
+-- Always handle potential AI function errors
+TRY_CAST(
+    SNOWFLAKE.CORTEX.COMPLETE('mistral-large2', prompt_text) 
+    AS STRING
+) AS ai_response
+```
+
+## View Creation Standards
+
+### Analytics Views Pattern
+```sql
+CREATE OR REPLACE VIEW [theme]_[analysis_type] AS
+SELECT 
+    -- Core dimensions
+    date_column,
+    location_column,
+    category_column,
+    
+    -- Metrics with meaningful aliases
+    COUNT(*) as record_count,
+    AVG(numeric_column) as avg_value,
+    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY numeric_column) as median_value,
+    
+    -- Time-based calculations
+    LAG(numeric_column) OVER (ORDER BY date_column) as previous_value,
+    (numeric_column - LAG(numeric_column) OVER (ORDER BY date_column)) / 
+    LAG(numeric_column) OVER (ORDER BY date_column) * 100 as pct_change
+    
+FROM [theme]_raw_table
+GROUP BY date_column, location_column, category_column
+ORDER BY date_column DESC;
+```
+
+## Testing and Validation
+
+### Data Quality Checks
+```sql
+-- Always include validation queries
+SELECT 
+    'Data Quality Check' as check_type,
+    COUNT(*) as total_records,
+    COUNT(DISTINCT key_column) as unique_keys,
+    COUNT(*) - COUNT(key_column) as null_keys,
+    MIN(date_column) as earliest_date,
+    MAX(date_column) as latest_date
+FROM table_name;
+```
+
+### Performance Monitoring
+```sql
+-- Check query performance
+SELECT 
+    query_text,
+    execution_time,
+    warehouse_size,
+    bytes_scanned
+FROM information_schema.query_history
+WHERE query_text ILIKE '%your_table_name%'
+ORDER BY start_time DESC
+LIMIT 10;
+```
+
+## Common Anti-Patterns to Avoid
+
+❌ **Don't Use**:
+- `SELECT *` in production views
+- Cartesian joins without proper filtering
+- STRING_AGG (use LISTAGG instead)
+- Unqualified table names in multi-schema queries
+- Dynamic SQL without parameterization
+
+✅ **Do Use**:
+- Explicit column lists
+- Proper JOIN conditions with appropriate indexes
+- LISTAGG for string aggregation
+- Fully qualified table names (schema.table)
+- Parameterized queries with variables

@@ -1,0 +1,230 @@
+---
+description: Data processing workflow patterns for NZ hackathon datasets
+globs: scripts/process_*.py,scripts/setup_*.sql
+---
+
+# NZ Hackathon Data Processing Patterns
+
+## Python Processing Scripts (`scripts/process_*.py`)
+
+### Standard Structure
+```python
+#!/usr/bin/env python3
+"""
+Process [DATASET_NAME] for [THEME] schema
+Handles: [specific data challenges, e.g., encoding, coordinates, JSON parsing]
+"""
+
+import pandas as pd
+import numpy as np
+from pathlib import Path
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def main():
+    """Main processing pipeline"""
+    # 1. Read raw data with proper encoding
+    # 2. Clean and validate data
+    # 3. Transform to Snowflake-ready format
+    # 4. Save to processed_data/ directory
+    
+if __name__ == "__main__":
+    main()
+```
+
+### Common Patterns
+
+#### File Reading with Encoding Handling
+```python
+def read_csv_robust(file_path):
+    """Read CSV with fallback encoding"""
+    try:
+        return pd.read_csv(file_path, encoding='utf-8')
+    except UnicodeDecodeError:
+        logger.warning(f"UTF-8 failed for {file_path}, trying windows-1252")
+        return pd.read_csv(file_path, encoding='windows-1252')
+```
+
+#### Coordinate Conversion (DMS to Decimal)
+```python
+def dms_to_decimal(dms_str):
+    """Convert degrees-minutes-seconds to decimal degrees"""
+    if pd.isna(dms_str):
+        return None
+    # Implementation for DMS parsing
+    return decimal_degrees
+```
+
+#### Data Validation
+```python
+def validate_coordinates(df):
+    """Ensure coordinates are within valid NZ bounds"""
+    return df[
+        (df['latitude_decimal'].between(-47, -34)) &  # NZ latitude range
+        (df['longitude_decimal'].between(166, 179))   # NZ longitude range
+    ]
+```
+
+#### Output Standardization
+```python
+def save_processed_data(df, filename):
+    """Save with consistent formatting"""
+    output_path = Path('processed_data') / filename
+    df.to_csv(output_path, index=False, date_format='%Y-%m-%d')
+    logger.info(f"Saved {len(df)} records to {output_path}")
+```
+
+## SQL Setup Scripts (`scripts/setup_*.sql`)
+
+### Standard Structure
+```sql
+-- =============================================
+-- [THEME] SCHEMA SETUP
+-- =============================================
+
+USE ROLE ACCOUNTADMIN;
+USE DATABASE nz_partner_hackathon;
+USE SCHEMA [THEME];
+
+-- 1. FILE FORMATS
+CREATE OR REPLACE FILE FORMAT [theme]_csv_format
+    TYPE = 'CSV'
+    FIELD_DELIMITER = ','
+    SKIP_HEADER = 1
+    NULL_IF = ('', 'NULL', 'N/A')
+    EMPTY_FIELD_AS_NULL = TRUE
+    ERROR_ON_COLUMN_COUNT_MISMATCH = FALSE;
+
+-- 2. STAGES  
+CREATE OR REPLACE STAGE [theme]_stage
+    FILE_FORMAT = [theme]_csv_format
+    COMMENT = 'Stage for [theme] data files';
+
+-- 3. TABLES
+-- 4. VIEWS
+-- 5. DATA LOADING
+-- 6. SAMPLE QUERIES
+```
+
+### Key Patterns
+
+#### Robust Table Creation
+```sql
+CREATE OR REPLACE TABLE dataset_name (
+    -- Use appropriate Snowflake data types
+    id STRING,
+    timestamp_col TIMESTAMP,
+    numeric_col NUMBER(10,2),
+    json_col VARIANT,
+    location_point GEOGRAPHY,
+    -- Always include audit columns
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP(),
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP()
+);
+```
+
+#### Safe Data Loading
+```sql
+-- Upload files
+PUT file://processed_data/dataset.csv @[theme]_stage;
+
+-- Load with error handling
+COPY INTO dataset_name
+FROM @[theme]_stage/dataset.csv
+FILE_FORMAT = [theme]_csv_format
+ON_ERROR = 'CONTINUE'
+VALIDATION_MODE = 'RETURN_ERRORS';
+
+-- Verify data quality
+SELECT COUNT(*) as total_records,
+       COUNT(DISTINCT id) as unique_records,
+       MIN(created_at) as oldest_record,
+       MAX(created_at) as newest_record
+FROM dataset_name;
+```
+
+#### Geography Data Handling
+```sql
+-- Update geography points safely
+UPDATE dataset_name 
+SET location_point = TO_GEOGRAPHY('POINT(' || longitude_decimal || ' ' || latitude_decimal || ')')
+WHERE latitude_decimal BETWEEN -90 AND 90 
+  AND longitude_decimal BETWEEN -180 AND 180
+  AND latitude_decimal IS NOT NULL 
+  AND longitude_decimal IS NOT NULL;
+```
+
+#### View Creation for Analytics
+```sql
+CREATE OR REPLACE VIEW dataset_analytics AS
+SELECT 
+    -- Aggregate metrics
+    DATE_TRUNC('month', timestamp_col) as month,
+    COUNT(*) as record_count,
+    AVG(numeric_col) as avg_value,
+    -- Geospatial analysis
+    ST_X(location_point) as longitude,
+    ST_Y(location_point) as latitude
+FROM dataset_name
+WHERE location_point IS NOT NULL
+GROUP BY month, longitude, latitude;
+```
+
+## Error Handling Patterns
+
+### Python Error Handling
+```python
+def process_with_retry(func, max_retries=3):
+    """Retry processing on failure"""
+    for attempt in range(max_retries):
+        try:
+            return func()
+        except Exception as e:
+            logger.warning(f"Attempt {attempt + 1} failed: {e}")
+            if attempt == max_retries - 1:
+                raise
+```
+
+### SQL Error Recovery
+```sql
+-- Check for loading errors
+SELECT * FROM TABLE(RESULT_SCAN(LAST_QUERY_ID()))
+WHERE ERROR IS NOT NULL;
+
+-- Rollback pattern
+BEGIN;
+-- Data operations
+COMMIT; -- or ROLLBACK on error
+```
+
+## Data Quality Checks
+
+### Required Validations
+1. **Record Count Validation**: Compare input vs output
+2. **Data Type Validation**: Ensure proper casting
+3. **Geographic Bounds**: Validate NZ coordinates
+4. **Duplicate Detection**: Check for unique constraints
+5. **Null Value Analysis**: Identify missing data patterns
+
+### Quality Metrics
+```sql
+-- Standard quality check
+SELECT 
+    'dataset_name' as table_name,
+    COUNT(*) as total_records,
+    COUNT(DISTINCT id) as unique_records,
+    (COUNT(*) - COUNT(DISTINCT id)) as duplicates,
+    COUNT(CASE WHEN location_point IS NULL THEN 1 END) as missing_location,
+    MIN(timestamp_col) as date_range_start,
+    MAX(timestamp_col) as date_range_end
+FROM dataset_name;
+```
+
+## Integration with Existing Rules
+
+- Follow [snowflake-development](mdc:.cursor/rules/snowflake-development.mdc) for SQL best practices
+- Use [git-commit-messages](mdc:.cursor/rules/git-commit-messages.mdc) for version control
+- Apply [stage-separation-concerns](mdc:.cursor/rules/stage-separation-concerns.mdc) for architecture
