@@ -11,7 +11,7 @@ This repository contains production-ready datasets and sample queries for Snowfl
 | ⚡ **URU_RANGI** | ✅ **COMPLETE** | **8,465** | 5-min electricity demand, fuel mix, quarterly trends | Energy AI, grid optimization, renewable forecasting |
 | 🌊 **WAIPUNA_RANGI** | ✅ **COMPLETE** | **5,776** | Climate data (89 years), flood mapping, disaster costs | Water risk AI, flood prediction, climate adaptation |
 | 🌾 **TIPUĀNUKU** | 🔄 Pending | - | Food/agriculture data needed | Agricultural AI projects |
-| 🌊 **WAITA** | ✅ **COMPLETE** | **31,314** | LINZ tide predictions + Maritime NZ incidents (2018-2024) | Marine AI, safety analytics, navigation optimization |
+| 🌊 **WAITA** | ✅ **COMPLETE** | **31,314** | LINZ tide predictions + Maritime NZ incidents + PDF document processing | Marine AI, safety analytics, intelligent document Q&A |
 | ✈️ **HIWA_I_TE_RANGI** | 🔄 Pending | - | Travel/tourism data needed | Tourism AI projects |
 
 ### 🚀 **Ready for AI Innovation:**
@@ -131,7 +131,9 @@ USE SCHEMA WAIPUNA_RANGI;
 ```sql
 USE DATABASE nz_partner_hackathon;
 USE SCHEMA WAITA;
--- 50,822 records: LINZ tide predictions, port metadata
+-- 31,314 records: LINZ tide predictions, maritime incidents, + PDF document processing
+-- NEW: Cortex Search on fishing regulation PDFs for intelligent Q&A
+-- FEATURED: "Is this the right time to go fishing?" Streamlit app template
 ```
 
 **4. Other Themes**: Sample query files will be created as datasets are added
@@ -173,9 +175,17 @@ All datasets include proper attribution to their original sources and are ready 
 - **NIWA (National Institute of Water & Atmospheric Research)**: Climate station statistics (89 years, 1933-2022)
 - **Waikato Regional Council**: Flood hazard mapping and spatial risk data
 - **ICNZ (Insurance Council of New Zealand)**: Natural disaster insurance costs and financial impact data
+- **LINZ (Land Information New Zealand)**: Tide predictions for 6 major NZ ports (2024-2026) 
+- **Maritime NZ**: Accident and incident reports with safety analytics (2018-2024)
+- **Fisheries NZ**: PDF regulations ready for Cortex Search document processing
+
+### **🆕 AI Document Processing Capabilities**
+- **Snowflake Cortex PARSE_DOCUMENT**: Extract text and layout from PDF regulations
+- **SPLIT_TEXT_RECURSIVE_CHARACTER**: Intelligent text chunking for semantic search
+- **Cortex Search Service**: Natural language Q&A on fishing regulations and marine safety documents
+- **Multi-modal AI**: Ready for images, PDFs, and structured data integration
 
 ### **🔄 Planned Data Sources**
-- **LINZ (Land Information New Zealand)**: Tide and marine data
 - **Stats NZ**: Agriculture, tourism, and socio-economic data
 - **MPI (Ministry for Primary Industries)**: Food safety and agricultural production data
 

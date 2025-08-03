@@ -37,7 +37,29 @@ CREATE OR REPLACE STAGE marine_data_stage
 COMMENT = 'Stage for ocean and marine data files (tide predictions, marine weather, etc.)';
 
 -- =============================================
--- 4. TABLE DEFINITIONS
+-- 4. FILE FORMAT FOR PDF DOCUMENTS
+-- =============================================
+
+CREATE OR REPLACE FILE FORMAT waita_pdf_format
+TYPE = 'CSV'
+FIELD_DELIMITER = ','
+RECORD_DELIMITER = '\n'
+SKIP_HEADER = 0
+FIELD_OPTIONALLY_ENCLOSED_BY = '"'
+NULL_IF = ('NULL', 'null', '', '\\N')
+COMMENT = 'File format for PDF and document uploads in WAITA schema';
+
+-- =============================================
+-- 5. STAGE FOR PDF DOCUMENTS
+-- =============================================
+
+CREATE OR REPLACE STAGE fishing_documents_stage
+DIRECTORY = (ENABLE = TRUE)
+ENCRYPTION = (TYPE = 'SNOWFLAKE_SSE')
+COMMENT = 'Stage for fishing regulation PDFs and maritime documents with server-side encryption for Cortex parsing';
+
+-- =============================================
+-- 6. TABLE DEFINITIONS
 -- =============================================
 
 -- Main tide predictions table
@@ -126,8 +148,63 @@ CREATE OR REPLACE TABLE maritime_incidents (
     load_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP()
 ) COMMENT = 'Maritime NZ accident and incident reports (2018-2024) with safety analysis and vessel details';
 
+-- Fishing regulations and documents table for parsed PDF content
+CREATE OR REPLACE TABLE fishing_documents (
+    document_id STRING PRIMARY KEY,
+    file_name STRING,
+    file_path STRING,
+    document_type STRING COMMENT 'Fishing regulations, marine safety guides, etc.',
+    nz_region STRING COMMENT 'Regional jurisdiction for fishing rules',
+    upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP(),
+    parsed_text VARIANT COMMENT 'Full parsed document content from PARSE_DOCUMENT',
+    document_size_bytes NUMBER,
+    page_count NUMBER,
+    data_source STRING DEFAULT 'Fisheries NZ',
+    load_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP()
+) COMMENT = 'Parsed fishing regulation PDFs and maritime documents for intelligent search';
+
+-- Document chunks table for Cortex Search processing
+CREATE OR REPLACE TABLE fishing_document_chunks (
+    chunk_id STRING PRIMARY KEY,
+    document_id STRING,
+    file_name STRING,
+    chunk_text STRING COMMENT 'Text chunk for Cortex Search indexing (<=512 tokens recommended)',
+    chunk_sequence NUMBER COMMENT 'Order of chunks within the document',
+    chunk_size_tokens NUMBER COMMENT 'Token count for this chunk',
+    document_section STRING COMMENT 'Section/chapter name if identifiable',
+    nz_region STRING COMMENT 'Regional jurisdiction for fishing rules',
+    data_source STRING DEFAULT 'Fisheries NZ',
+    load_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP(),
+    FOREIGN KEY (document_id) REFERENCES fishing_documents(document_id)
+) COMMENT = 'Chunked fishing document text optimized for Cortex Search semantic retrieval';
+
 -- =============================================
--- 5. ANALYTICAL VIEWS
+-- 7. CORTEX SEARCH SERVICE FOR INTELLIGENT Q&A
+-- =============================================
+
+-- AUTOMATED PDF PROCESSING & CORTEX SEARCH SERVICE SETUP
+-- =====================================================
+-- Run the comprehensive Cortex setup script to make your data AI-ready:
+--
+-- 📄 STEP 1: Add fishing regulation PDFs to data/fish-pdf/
+-- 🚀 STEP 2: Execute: snow sql --connection admin --filename scripts/setup_cortex_fishing_documents.sql
+-- 📱 STEP 3: Or run: ./scripts/run_cortex_setup.sh
+--
+-- This will automatically:
+-- ✅ Parse all PDFs using CORTEX.PARSE_DOCUMENT (LAYOUT mode)
+-- ✅ Create intelligent chunks using CORTEX.SPLIT_TEXT_RECURSIVE_CHARACTER  
+-- ✅ Build production-ready fishing_regulations_search Cortex Search Service
+-- ✅ Enable RAG applications, chatbots, and intelligent Q&A
+-- ✅ Ready for "Is this the right time to go fishing?" Streamlit apps
+--
+-- Once complete, your search service will be ready for:
+-- • Natural language queries: "What are snapper bag limits in Auckland?"
+-- • Semantic search across all regional fishing regulations
+-- • RAG applications using SNOWFLAKE.CORTEX.SEARCH_PREVIEW()
+-- • AI-powered compliance checking with CORTEX.COMPLETE()
+
+-- =============================================
+-- 8. ANALYTICAL VIEWS
 -- =============================================
 
 -- Daily tide summary view
@@ -322,6 +399,7 @@ FILE_FORMAT = (FORMAT_NAME = waita_csv_format);
 UPDATE maritime_incidents 
 SET location_point = TO_GEOGRAPHY('POINT(' || longitude_decimal || ' ' || latitude_decimal || ')')
 WHERE latitude_decimal IS NOT NULL AND longitude_decimal IS NOT NULL;
+
 
 -- =============================================
 -- 7. DATA VALIDATION QUERIES

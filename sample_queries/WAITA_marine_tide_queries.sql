@@ -534,11 +534,135 @@ WHERE date BETWEEN '2024-01-01' AND '2024-12-31'
 ORDER BY port_code, date, tide_time;
 
 -- =============================================
--- 9. NEXT STEPS FOR PARTICIPANTS
+-- 9. INTELLIGENT DOCUMENT Q&A WITH CORTEX SEARCH  
+-- =============================================
+
+-- Prerequisites: 
+-- 1. Add fishing regulation PDFs to data/fish-pdf/ folder
+-- 2. Run: snow sql --connection admin --filename scripts/setup_cortex_fishing_documents.sql
+-- 3. Or execute: ./scripts/run_cortex_setup.sh
+-- 
+-- This automatically creates a production-ready fishing_regulations_search Cortex Search Service
+
+-- Ask natural language questions about fishing regulations
+SELECT PARSE_JSON(
+    SNOWFLAKE.CORTEX.SEARCH_PREVIEW(
+        'fishing_regulations_search',
+        '{
+            "query": "What are the daily bag limits for snapper in Auckland?",
+            "columns": ["file_name", "chunk_text", "document_section", "nz_region"],
+            "limit": 3
+        }'
+    )
+)['results'] as fishing_rules_results;
+
+-- Find size restrictions for specific fish species
+SELECT PARSE_JSON(
+    SNOWFLAKE.CORTEX.SEARCH_PREVIEW(
+        'fishing_regulations_search',
+        '{
+            "query": "minimum size limits for kahawai and john dory",
+            "columns": ["file_name", "chunk_text", "document_section", "nz_region"],
+            "filter": {"@eq": {"document_section": "Size Restrictions"}},
+            "limit": 5
+        }'
+    )
+)['results'] as size_limit_results;
+
+-- 🎣 SMART FISHING TRIP PLANNER: "Is this the right time to go fishing?"
+-- Combines regulations, tides, and safety data for intelligent recommendations
+WITH fishing_conditions AS (
+    -- Get optimal tide times for fishing
+    SELECT 
+        tp.port_name,
+        tp.date,
+        tp.tide_time,
+        tp.tide_height_m,
+        CASE 
+            WHEN tp.tide_height_m BETWEEN 1.5 AND 2.5 THEN 'Excellent for Surf Casting'
+            WHEN tp.tide_height_m > 3.0 THEN 'Perfect for Deep Water Fishing'
+            WHEN tp.tide_height_m < 1.0 THEN 'Great for Rock Pools & Shallow Areas'
+            ELSE 'Good General Fishing'
+        END as fishing_suitability,
+        -- Add moon phase consideration (simplified)
+        CASE 
+            WHEN EXTRACT(DAY FROM tp.date) IN (1, 15, 16, 30) THEN 'New/Full Moon - Peak Feeding'
+            ELSE 'Normal Feeding Activity'
+        END as lunar_factor
+    FROM tide_predictions tp
+    WHERE tp.date BETWEEN CURRENT_DATE() AND CURRENT_DATE() + 3
+    AND tp.port_name = 'Auckland'
+    ORDER BY tp.tide_height_m DESC
+    LIMIT 10
+),
+safety_check AS (
+    -- Check recent maritime incidents for safety awareness
+    SELECT 
+        mi.nz_region,
+        COUNT(*) as recent_incidents,
+        STRING_AGG(DISTINCT mi.what_happened, '; ') as incident_types
+    FROM maritime_incidents mi
+    WHERE mi.nz_region = 'Auckland'
+    AND mi.event_date >= CURRENT_DATE() - 30
+    AND mi.incident_severity IN ('Critical', 'Major')
+    GROUP BY mi.nz_region
+)
+SELECT 
+    fc.port_name,
+    fc.date,
+    fc.tide_time,
+    fc.tide_height_m,
+    fc.fishing_suitability,
+    fc.lunar_factor,
+    COALESCE(sc.recent_incidents, 0) as safety_incidents_last_30_days,
+    CASE 
+        WHEN COALESCE(sc.recent_incidents, 0) = 0 
+             AND fc.fishing_suitability LIKE '%Excellent%' 
+             AND fc.lunar_factor LIKE '%Peak%'
+        THEN '🎣 PERFECT TIME TO FISH! All conditions optimal'
+        WHEN COALESCE(sc.recent_incidents, 0) = 0 
+             AND fc.fishing_suitability NOT LIKE '%Good General%'
+        THEN '✅ GREAT TIME TO FISH! Good conditions'
+        WHEN COALESCE(sc.recent_incidents, 0) > 0
+        THEN '⚠️ FISH WITH CAUTION - Recent safety incidents reported'
+        ELSE '👍 OK TIME TO FISH - Average conditions'
+    END as fishing_recommendation
+FROM fishing_conditions fc
+LEFT JOIN safety_check sc ON fc.port_name = sc.nz_region
+ORDER BY fc.tide_height_m DESC;
+
+-- AI-powered fishing regulation compliance checker
+SELECT 
+    SNOWFLAKE.CORTEX.COMPLETE(
+        'mistral-large2',
+        'Based on typical NZ recreational fishing regulations, is it legal to catch 5 snapper and 3 gurnard in one day near Auckland? Consider daily bag limits, size restrictions, and seasonal closures. Provide a clear answer with explanation.'
+    ) as regulation_guidance;
+
+-- =============================================
+-- 10. NEXT STEPS FOR PARTICIPANTS
 -- =============================================
 
 /*
 POTENTIAL AI/ML PROJECT IDEAS:
+
+🎣 FEATURED: "IS THIS THE RIGHT TIME TO GO FISHING?" STREAMLIT APP
+   =====================================================
+   Build an intelligent fishing assistant that combines:
+   - Real-time tide predictions (WAITA data)
+   - AI-powered fishing regulation Q&A (Cortex Search on PDF docs)
+   - Maritime safety incident analysis
+   - Weather API integration (MetService)
+   - Species-specific recommendations
+   - Lunar cycle fishing predictions
+   - Interactive maps with port locations (Snowflake GEOGRAPHY)
+   - Mobile-responsive Streamlit interface
+   
+   Key Features:
+   * Ask questions like "Can I catch snapper today?" (Cortex Search)
+   * Get tide recommendations: "Best tide times for surf casting"
+   * Safety alerts: "Any recent incidents near this location?"
+   * Compliance checking: "Is my catch within legal limits?"
+   * Trip planning: "Plan a 3-day fishing trip to Bay of Islands"
 
 1. 🌊 TIDE PREDICTION MODELS
    - Train ML models to predict tide heights using historical patterns
