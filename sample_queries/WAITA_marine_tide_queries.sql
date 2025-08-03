@@ -743,6 +743,144 @@ SELECT
 FROM comprehensive_context;
 
 -- =============================================
+-- 🎣 ALTERNATIVE: PIPE OPERATOR VERSION (CLEANER FLOW)
+-- Using Snowflake's native pipe operator for sequential data building
+-- =============================================
+
+-- Step 1: Define fishing trip parameters
+SELECT 
+    'Auckland' as target_location,
+    'snapper' as target_species,
+    CURRENT_DATE() as trip_start_date,
+    CURRENT_DATE() + 2 as trip_end_date,
+    'I want to catch snapper this weekend near Auckland. What are the regulations, when are the best tide times, and is it safe based on recent incidents?' as user_question
+
+-- Step 2: Search fishing regulations using RAG
+->> SELECT 
+    $1.*,
+    PARSE_JSON(
+        SNOWFLAKE.CORTEX.SEARCH_PREVIEW(
+            'fishing_regulations_search',
+            '{
+                "query": "snapper bag limit minimum size Auckland recreational fishing",
+                "columns": ["file_name", "chunk_text", "document_section", "nz_region"],
+                "filter": {"@eq": {"nz_region": "Auckland"}},
+                "limit": 3
+            }'
+        )
+    )['results'] as regulation_results
+    FROM $1
+
+-- Step 3: Get optimal tide times
+->> SELECT 
+    $1.*,
+    ARRAY_TO_STRING(
+        ARRAY_AGG(
+            tp.date::STRING || ' at ' || tp.tide_time || ' (' || tp.tide_height_m || 'm) - ' || 
+            CASE 
+                WHEN tp.tide_height_m BETWEEN 1.5 AND 2.5 THEN 'Excellent for Snapper (Mid-tide)'
+                WHEN tp.tide_height_m > 3.0 THEN 'Good for Deep Water Fishing'
+                WHEN tp.tide_height_m < 1.0 THEN 'Best for Shallow Water Species'
+                ELSE 'Moderate Fishing Conditions'
+            END
+        ) WITHIN GROUP (ORDER BY tp.date, tp.tide_time),
+        '\n'
+    ) as optimal_tides_text
+    FROM $1
+    CROSS JOIN (
+        SELECT tp.date, tp.tide_time, tp.tide_height_m,
+               ROW_NUMBER() OVER (PARTITION BY tp.date ORDER BY 
+                   CASE WHEN tp.tide_height_m BETWEEN 1.5 AND 2.5 THEN 1 ELSE 2 END,
+                   tp.tide_height_m DESC
+               ) as daily_rank
+        FROM tide_predictions tp
+        CROSS JOIN $1 params
+        WHERE tp.port_name = params.target_location
+        AND tp.date BETWEEN params.trip_start_date AND params.trip_end_date
+        AND tp.tide_height_m > 0.5
+        QUALIFY daily_rank <= 3
+    ) tp
+
+-- Step 4: Add safety assessment
+->> SELECT 
+    $1.*,
+    COALESCE(
+        CASE 
+            WHEN COUNT(CASE WHEN mi.incident_severity IN ('Critical', 'Major') THEN 1 END) = 0 THEN 'Low Risk'
+            WHEN COUNT(CASE WHEN mi.incident_severity IN ('Critical', 'Major') THEN 1 END) <= 2 THEN 'Moderate Risk'
+            ELSE 'High Risk - Extra Caution Required'
+        END, 'Low Risk'
+    ) as safety_rating,
+    COALESCE(COUNT(mi.event_id), 0) as total_incidents_last_30_days,
+    COALESCE(LISTAGG(DISTINCT mi.what_happened, '; '), 'No major incidents reported') as safety_details
+    FROM $1
+    LEFT JOIN maritime_incidents mi ON mi.nz_region = $1.target_location
+        AND mi.event_date >= CURRENT_DATE() - 30
+    GROUP BY $1.target_location, $1.target_species, $1.trip_start_date, $1.trip_end_date, 
+             $1.user_question, $1.regulation_results, $1.optimal_tides_text
+
+-- Step 5: Extract regulation text from RAG results
+->> SELECT 
+    $1.*,
+    ARRAY_TO_STRING(
+        ARRAY_AGG(r.value:chunk_text::STRING) WITHIN GROUP (ORDER BY r.index),
+        '\n\n---REGULATION---\n\n'
+    ) as regulations_text
+    FROM $1,
+    LATERAL FLATTEN(input => $1.regulation_results) r
+    GROUP BY $1.target_location, $1.target_species, $1.trip_start_date, $1.trip_end_date, 
+             $1.user_question, $1.regulation_results, $1.optimal_tides_text,
+             $1.safety_rating, $1.total_incidents_last_30_days, $1.safety_details
+
+-- Step 6: Build comprehensive prompt and get AI response
+->> SELECT 
+    'Pipe Operator Fishing Planner' as assistant_type,
+    target_location,
+    target_species,
+    user_question,
+    SNOWFLAKE.CORTEX.COMPLETE(
+        'mistral-large2',
+        PROMPT(
+            'You are an expert New Zealand fishing guide. Answer this question: {0}
+
+🎣 FISHING REGULATIONS:
+{1}
+
+🌊 OPTIMAL TIDE TIMES (Next 3 Days):
+{2}
+
+⚠️ SAFETY ASSESSMENT:
+Risk Level: {3}
+Recent Incidents (30 days): {4}
+Details: {5}
+
+Please provide:
+1. REGULATIONS SUMMARY: Key rules for {6} in {7} (bag limits, size requirements)
+2. OPTIMAL TIMING: Best 3 tide times with specific recommendations  
+3. SAFETY ADVICE: Current risk assessment and safety precautions
+4. TRIP PLAN: Day-by-day fishing strategy combining all factors
+5. COMPLIANCE CHECKLIST: What to remember for legal, safe fishing
+
+Format as a practical, actionable fishing guide.',
+            user_question,
+            regulations_text,
+            optimal_tides_text,
+            safety_rating,
+            total_incidents_last_30_days,
+            safety_details,
+            target_species,
+            target_location
+        )
+    ) as comprehensive_fishing_plan,
+    
+    -- Raw data for debugging
+    regulations_text,
+    optimal_tides_text,
+    safety_rating,
+    safety_details
+    FROM $1;
+
+-- =============================================
 -- 🚀 HACKATHON INSPIRATION: What You Can Build!
 -- =============================================
 /*
