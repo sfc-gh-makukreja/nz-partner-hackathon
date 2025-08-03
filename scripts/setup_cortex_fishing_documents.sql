@@ -322,6 +322,7 @@ CREATE OR REPLACE CORTEX SEARCH SERVICE fishing_regulations_search
             file_name,
             chunk_text,
             document_section,
+            chunk_sequence,
             nz_region,
             ARRAY_TO_STRING(keywords, ',') as keywords,
             data_source
@@ -351,7 +352,7 @@ SELECT 'Filtered Search Test: Size Restrictions' AS test_name,
            'fishing_regulations_search',
            '{
                "query": "minimum size requirements",
-               "columns": ["file_name", "chunk_text", "nz_region"],
+               "columns": ["file_name", "chunk_text", "nz_region", "chunk_sequence"],
                "filter": {"@eq": {"document_section": "Size Restrictions"}},
                "limit": 2
            }'

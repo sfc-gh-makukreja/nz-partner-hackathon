@@ -629,10 +629,10 @@ optimal_tides AS (
 ),
 
 safety_assessment AS (
-    -- Analyze recent maritime safety incidents
+    -- Analyze maritime safety incidents for the last 365 days
     SELECT 
         ufq.target_location,
-        COUNT(*) as total_incidents_last_30_days,
+        COUNT(*) as total_incidents_last_365_days,
         COUNT(CASE WHEN mi.incident_severity = 'Critical' THEN 1 END) as critical_incidents,
         COUNT(CASE WHEN mi.incident_severity = 'Major' THEN 1 END) as major_incidents,
         LISTAGG(DISTINCT mi.what_happened, '; ') as recent_incident_types,
@@ -643,7 +643,7 @@ safety_assessment AS (
         END as safety_rating
     FROM user_fishing_query ufq
     LEFT JOIN maritime_incidents mi ON mi.nz_region = ufq.target_location
-    WHERE mi.event_date >= CURRENT_DATE() - 30
+    WHERE mi.event_date >= CURRENT_DATE() - 365
     GROUP BY ufq.target_location
 ),
 
@@ -679,206 +679,48 @@ q3_safety AS (
     SELECT 
         q2.*,
         sa.safety_rating,
-        sa.total_incidents_last_30_days,
+        sa.total_incidents_last_365_days,
         COALESCE(sa.recent_incident_types, 'No major incidents reported') as safety_details
     FROM q2_tides q2
     CROSS JOIN safety_assessment sa
 ),
 
-p1_regulations_prompt AS (
-    SELECT 
-        q3.*,
-        PROMPT(
-            'Fishing Question: {0}\nTarget Species: {1} in {2}\n\n🎣 FISHING REGULATIONS:\n{3}',
-            user_question,
-            target_species,
-            target_location,
-            regulations_text
-        ) as prompt_with_regulations
-    FROM q3_safety q3
-),
-
-p2_tides_prompt AS (
-    SELECT 
-        p1.*,
-        PROMPT(
-            '{0}\n\n🌊 OPTIMAL TIDE TIMES (Next 3 Days):\n{1}',
-            prompt_with_regulations,
-            tides_text
-        ) as prompt_with_tides
-    FROM p1_regulations_prompt p1
-),
-
 comprehensive_context AS (
     SELECT 
-        p2.*,
-        PROMPT(
-            '{0}\n\n⚠️ SAFETY ASSESSMENT:\nRisk Level: {1}\nRecent Incidents (30 days): {2}\nDetails: {3}\n\nPlease provide:\n1. REGULATIONS SUMMARY: Key rules for {4} in {5} (bag limits, size requirements)\n2. OPTIMAL TIMING: Best 3 tide times with specific recommendations\n3. SAFETY ADVICE: Current risk assessment and safety precautions\n4. TRIP PLAN: Day-by-day fishing strategy combining all factors\n5. COMPLIANCE CHECKLIST: What to remember for legal, safe fishing\n\nFormat as a practical, actionable fishing guide.',
-            prompt_with_tides,
-            safety_rating,
-            total_incidents_last_30_days,
-            safety_details,
-            target_species,
-            target_location
-        ) as final_prompt
-    FROM p2_tides_prompt p2
+        q3.*,
+        'Question: ' || user_question || 
+        '\n\n🎣 FISHING REGULATIONS:\n' || regulations_text ||
+        '\n\n🌊 OPTIMAL TIDE TIMES (Next 3 Days):\n' || tides_text ||
+        '\n\n⚠️ SAFETY ASSESSMENT:\nRisk Level: ' || safety_rating ||
+        '\nRecent Incidents (365 days): ' || total_incidents_last_365_days ||
+        '\nDetails: ' || safety_details ||
+        '\n\nPlease provide:\n1. REGULATIONS SUMMARY: Key rules for ' || target_species || ' in ' ||
+         target_location || ' (bag limits, size requirements)'||
+        '\n2. OPTIMAL TIMING: Best 3 tide times with specific recommendations'||
+        '\n3. SAFETY ADVICE: Current risk assessment and safety precautions'||
+        '\n4. TRIP PLAN: Day-by-day fishing strategy combining all factors'||
+        '\n5. COMPLIANCE CHECKLIST: What to remember for legal, safe fishing'||
+        '\n\nFormat as a practical, actionable fishing guide.' as full_context
+    FROM q3_safety q3
 )
 
 SELECT 
-    'Complete Fishing Trip Planner' as assistant_type,
+    'Fishing Trip Planner' as assistant_type,
     target_location,
     target_species,
     user_question,
-    -- AI synthesis using progressively built prompt
+    -- AI synthesis using string concatenated context
     SNOWFLAKE.CORTEX.COMPLETE(
         'mistral-large2',
-        final_prompt
+        full_context
     ) as comprehensive_fishing_plan,
     
     -- Raw data for app developers
     regulations_text as raw_regulations_data,
     tides_text as raw_tide_data,
     safety_rating as raw_safety_rating,
-    final_prompt as debug_prompt
+    full_context as debug_prompt
 FROM comprehensive_context;
-
--- =============================================
--- 🎣 ALTERNATIVE: PIPE OPERATOR VERSION (CLEANER FLOW)
--- Using Snowflake's native pipe operator for sequential data building
--- =============================================
-
--- Step 1: Define fishing trip parameters
-SELECT 
-    'Auckland' as target_location,
-    'snapper' as target_species,
-    CURRENT_DATE() as trip_start_date,
-    CURRENT_DATE() + 2 as trip_end_date,
-    'I want to catch snapper this weekend near Auckland. What are the regulations, when are the best tide times, and is it safe based on recent incidents?' as user_question
-
--- Step 2: Search fishing regulations using RAG
-->> SELECT 
-    $1.*,
-    PARSE_JSON(
-        SNOWFLAKE.CORTEX.SEARCH_PREVIEW(
-            'fishing_regulations_search',
-            '{
-                "query": "snapper bag limit minimum size Auckland recreational fishing",
-                "columns": ["file_name", "chunk_text", "document_section", "nz_region"],
-                "filter": {"@eq": {"nz_region": "Auckland"}},
-                "limit": 3
-            }'
-        )
-    )['results'] as regulation_results
-    FROM $1
-
--- Step 3: Get optimal tide times
-->> SELECT 
-    $1.*,
-    ARRAY_TO_STRING(
-        ARRAY_AGG(
-            tp.date::STRING || ' at ' || tp.tide_time || ' (' || tp.tide_height_m || 'm) - ' || 
-            CASE 
-                WHEN tp.tide_height_m BETWEEN 1.5 AND 2.5 THEN 'Excellent for Snapper (Mid-tide)'
-                WHEN tp.tide_height_m > 3.0 THEN 'Good for Deep Water Fishing'
-                WHEN tp.tide_height_m < 1.0 THEN 'Best for Shallow Water Species'
-                ELSE 'Moderate Fishing Conditions'
-            END
-        ) WITHIN GROUP (ORDER BY tp.date, tp.tide_time),
-        '\n'
-    ) as optimal_tides_text
-    FROM $1
-    CROSS JOIN (
-        SELECT tp.date, tp.tide_time, tp.tide_height_m,
-               ROW_NUMBER() OVER (PARTITION BY tp.date ORDER BY 
-                   CASE WHEN tp.tide_height_m BETWEEN 1.5 AND 2.5 THEN 1 ELSE 2 END,
-                   tp.tide_height_m DESC
-               ) as daily_rank
-        FROM tide_predictions tp
-        CROSS JOIN $1 params
-        WHERE tp.port_name = params.target_location
-        AND tp.date BETWEEN params.trip_start_date AND params.trip_end_date
-        AND tp.tide_height_m > 0.5
-        QUALIFY daily_rank <= 3
-    ) tp
-
--- Step 4: Add safety assessment
-->> SELECT 
-    $1.*,
-    COALESCE(
-        CASE 
-            WHEN COUNT(CASE WHEN mi.incident_severity IN ('Critical', 'Major') THEN 1 END) = 0 THEN 'Low Risk'
-            WHEN COUNT(CASE WHEN mi.incident_severity IN ('Critical', 'Major') THEN 1 END) <= 2 THEN 'Moderate Risk'
-            ELSE 'High Risk - Extra Caution Required'
-        END, 'Low Risk'
-    ) as safety_rating,
-    COALESCE(COUNT(mi.event_id), 0) as total_incidents_last_30_days,
-    COALESCE(LISTAGG(DISTINCT mi.what_happened, '; '), 'No major incidents reported') as safety_details
-    FROM $1
-    LEFT JOIN maritime_incidents mi ON mi.nz_region = $1.target_location
-        AND mi.event_date >= CURRENT_DATE() - 30
-    GROUP BY $1.target_location, $1.target_species, $1.trip_start_date, $1.trip_end_date, 
-             $1.user_question, $1.regulation_results, $1.optimal_tides_text
-
--- Step 5: Extract regulation text from RAG results
-->> SELECT 
-    $1.*,
-    ARRAY_TO_STRING(
-        ARRAY_AGG(r.value:chunk_text::STRING) WITHIN GROUP (ORDER BY r.index),
-        '\n\n---REGULATION---\n\n'
-    ) as regulations_text
-    FROM $1,
-    LATERAL FLATTEN(input => $1.regulation_results) r
-    GROUP BY $1.target_location, $1.target_species, $1.trip_start_date, $1.trip_end_date, 
-             $1.user_question, $1.regulation_results, $1.optimal_tides_text,
-             $1.safety_rating, $1.total_incidents_last_30_days, $1.safety_details
-
--- Step 6: Build comprehensive prompt and get AI response
-->> SELECT 
-    'Pipe Operator Fishing Planner' as assistant_type,
-    target_location,
-    target_species,
-    user_question,
-    SNOWFLAKE.CORTEX.COMPLETE(
-        'mistral-large2',
-        PROMPT(
-            'You are an expert New Zealand fishing guide. Answer this question: {0}
-
-🎣 FISHING REGULATIONS:
-{1}
-
-🌊 OPTIMAL TIDE TIMES (Next 3 Days):
-{2}
-
-⚠️ SAFETY ASSESSMENT:
-Risk Level: {3}
-Recent Incidents (30 days): {4}
-Details: {5}
-
-Please provide:
-1. REGULATIONS SUMMARY: Key rules for {6} in {7} (bag limits, size requirements)
-2. OPTIMAL TIMING: Best 3 tide times with specific recommendations  
-3. SAFETY ADVICE: Current risk assessment and safety precautions
-4. TRIP PLAN: Day-by-day fishing strategy combining all factors
-5. COMPLIANCE CHECKLIST: What to remember for legal, safe fishing
-
-Format as a practical, actionable fishing guide.',
-            user_question,
-            regulations_text,
-            optimal_tides_text,
-            safety_rating,
-            total_incidents_last_30_days,
-            safety_details,
-            target_species,
-            target_location
-        )
-    ) as comprehensive_fishing_plan,
-    
-    -- Raw data for debugging
-    regulations_text,
-    optimal_tides_text,
-    safety_rating,
-    safety_details
-    FROM $1;
 
 -- =============================================
 -- 🚀 HACKATHON INSPIRATION: What You Can Build!
