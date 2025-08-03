@@ -569,74 +569,190 @@ SELECT PARSE_JSON(
     )
 )['results'] as size_limit_results;
 
--- 🎣 SMART FISHING TRIP PLANNER: "Is this the right time to go fishing?"
--- Combines regulations, tides, and safety data for intelligent recommendations
-WITH fishing_conditions AS (
-    -- Get optimal tide times for fishing
+-- =============================================
+-- 🎣 COMPLETE FISHING TRIP PLANNER - RAG + MULTI-DATA INTEGRATION
+-- Complex Question: "I want to catch snapper this weekend near Auckland. 
+-- What are the regulations, when are the best tide times, and is it safe?"
+-- =============================================
+
+WITH user_fishing_query AS (
+    -- Define the fishing trip parameters
     SELECT 
-        tp.port_name,
+        'Auckland' as target_location,
+        'snapper' as target_species,
+        CURRENT_DATE() as trip_start_date,
+        CURRENT_DATE() + 2 as trip_end_date,
+        'I want to catch snapper this weekend near Auckland. What are the regulations, when are the best tide times, and is it safe based on recent incidents?' as user_question
+),
+
+regulation_search AS (
+    -- RAG: Search fishing regulations for snapper in Auckland
+    SELECT 
+        ufq.user_question,
+        ufq.target_location,
+        ufq.target_species,
+        PARSE_JSON(
+            SNOWFLAKE.CORTEX.SEARCH_PREVIEW(
+                'fishing_regulations_search',
+                '{
+                    "query": "snapper bag limit minimum size Auckland recreational fishing",
+                    "columns": ["file_name", "chunk_text", "document_section", "nz_region"],
+                    "filter": {"@eq": {"nz_region": "Auckland"}},
+                    "limit": 3
+                }'
+            )
+        )['results'] as regulation_results
+    FROM user_fishing_query ufq
+),
+
+optimal_tides AS (
+    -- Get best tide times for the fishing trip
+    SELECT 
+        ufq.target_location,
         tp.date,
         tp.tide_time,
         tp.tide_height_m,
         CASE 
-            WHEN tp.tide_height_m BETWEEN 1.5 AND 2.5 THEN 'Excellent for Surf Casting'
-            WHEN tp.tide_height_m > 3.0 THEN 'Perfect for Deep Water Fishing'
-            WHEN tp.tide_height_m < 1.0 THEN 'Great for Rock Pools & Shallow Areas'
-            ELSE 'Good General Fishing'
-        END as fishing_suitability,
-        -- Add moon phase consideration (simplified)
-        CASE 
-            WHEN EXTRACT(DAY FROM tp.date) IN (1, 15, 16, 30) THEN 'New/Full Moon - Peak Feeding'
-            ELSE 'Normal Feeding Activity'
-        END as lunar_factor
-    FROM tide_predictions tp
-    WHERE tp.date BETWEEN CURRENT_DATE() AND CURRENT_DATE() + 3
-    AND tp.port_name = 'Auckland'
-    ORDER BY tp.tide_height_m DESC
-    LIMIT 10
+            WHEN tp.tide_height_m BETWEEN 1.5 AND 2.5 THEN 'Excellent for Snapper (Mid-tide)'
+            WHEN tp.tide_height_m > 3.0 THEN 'Good for Deep Water Fishing'
+            WHEN tp.tide_height_m < 1.0 THEN 'Best for Shallow Water Species'
+            ELSE 'Moderate Fishing Conditions'
+        END as fishing_quality,
+        ROW_NUMBER() OVER (PARTITION BY tp.date ORDER BY 
+            CASE WHEN tp.tide_height_m BETWEEN 1.5 AND 2.5 THEN 1 ELSE 2 END,
+            tp.tide_height_m DESC
+        ) as daily_rank
+    FROM user_fishing_query ufq
+    JOIN tide_predictions tp ON tp.port_name = ufq.target_location
+    WHERE tp.date BETWEEN ufq.trip_start_date AND ufq.trip_end_date
+    AND tp.tide_height_m > 0.5  -- Filter out extreme low tides
 ),
-safety_check AS (
-    -- Check recent maritime incidents for safety awareness
-    SELECT 
-        mi.nz_region,
-        COUNT(*) as recent_incidents,
-        STRING_AGG(DISTINCT mi.what_happened, '; ') as incident_types
-    FROM maritime_incidents mi
-    WHERE mi.nz_region = 'Auckland'
-    AND mi.event_date >= CURRENT_DATE() - 30
-    AND mi.incident_severity IN ('Critical', 'Major')
-    GROUP BY mi.nz_region
-)
-SELECT 
-    fc.port_name,
-    fc.date,
-    fc.tide_time,
-    fc.tide_height_m,
-    fc.fishing_suitability,
-    fc.lunar_factor,
-    COALESCE(sc.recent_incidents, 0) as safety_incidents_last_30_days,
-    CASE 
-        WHEN COALESCE(sc.recent_incidents, 0) = 0 
-             AND fc.fishing_suitability LIKE '%Excellent%' 
-             AND fc.lunar_factor LIKE '%Peak%'
-        THEN '🎣 PERFECT TIME TO FISH! All conditions optimal'
-        WHEN COALESCE(sc.recent_incidents, 0) = 0 
-             AND fc.fishing_suitability NOT LIKE '%Good General%'
-        THEN '✅ GREAT TIME TO FISH! Good conditions'
-        WHEN COALESCE(sc.recent_incidents, 0) > 0
-        THEN '⚠️ FISH WITH CAUTION - Recent safety incidents reported'
-        ELSE '👍 OK TIME TO FISH - Average conditions'
-    END as fishing_recommendation
-FROM fishing_conditions fc
-LEFT JOIN safety_check sc ON fc.port_name = sc.nz_region
-ORDER BY fc.tide_height_m DESC;
 
--- AI-powered fishing regulation compliance checker
+safety_assessment AS (
+    -- Analyze recent maritime safety incidents
+    SELECT 
+        ufq.target_location,
+        COUNT(*) as total_incidents_last_30_days,
+        COUNT(CASE WHEN mi.incident_severity = 'Critical' THEN 1 END) as critical_incidents,
+        COUNT(CASE WHEN mi.incident_severity = 'Major' THEN 1 END) as major_incidents,
+        LISTAGG(DISTINCT mi.what_happened, '; ') WITHIN GROUP (ORDER BY mi.event_date DESC) as recent_incident_types,
+        CASE 
+            WHEN COUNT(CASE WHEN mi.incident_severity IN ('Critical', 'Major') THEN 1 END) = 0 THEN 'Low Risk'
+            WHEN COUNT(CASE WHEN mi.incident_severity IN ('Critical', 'Major') THEN 1 END) <= 2 THEN 'Moderate Risk'
+            ELSE 'High Risk - Extra Caution Required'
+        END as safety_rating
+    FROM user_fishing_query ufq
+    LEFT JOIN maritime_incidents mi ON mi.nz_region = ufq.target_location
+    WHERE mi.event_date >= CURRENT_DATE() - 30
+    GROUP BY ufq.target_location
+),
+
+comprehensive_context AS (
+    -- Combine all data sources into rich context
+    SELECT 
+        rs.user_question,
+        rs.target_location,
+        rs.target_species,
+        -- Regulations context
+        ARRAY_TO_STRING(
+            ARRAY_AGG(r.value:chunk_text::STRING) WITHIN GROUP (ORDER BY r.index),
+            '\n\n---REGULATION---\n\n'
+        ) as fishing_regulations,
+        -- Best tide times
+        ARRAY_TO_STRING(
+            ARRAY_AGG(
+                ot.date::STRING || ' at ' || ot.tide_time || ' (' || ot.tide_height_m || 'm) - ' || ot.fishing_quality
+            ) WITHIN GROUP (ORDER BY ot.date, ot.daily_rank),
+            '\n'
+        ) as optimal_tide_times,
+        -- Safety information
+        MAX(sa.safety_rating) as safety_rating,
+        MAX(sa.total_incidents_last_30_days) as safety_incidents,
+        MAX(sa.recent_incident_types) as safety_details
+    FROM regulation_search rs,
+    LATERAL FLATTEN(input => rs.regulation_results) r
+    CROSS JOIN (SELECT * FROM optimal_tides WHERE daily_rank <= 3) ot
+    CROSS JOIN safety_assessment sa
+    GROUP BY rs.user_question, rs.target_location, rs.target_species
+)
+
 SELECT 
+    'Complete Fishing Trip Planner' as assistant_type,
+    target_location,
+    target_species,
+    user_question,
+    -- AI-powered comprehensive trip planning advice
     SNOWFLAKE.CORTEX.COMPLETE(
         'mistral-large2',
-        'Based on typical NZ recreational fishing regulations, is it legal to catch 5 snapper and 3 gurnard in one day near Auckland? Consider daily bag limits, size restrictions, and seasonal closures. Provide a clear answer with explanation.'
-    ) as regulation_guidance;
+        PROMPT(
+            'You are an expert New Zealand fishing guide. Based on the comprehensive data below, provide a complete fishing trip plan for: {0}
+
+🎣 FISHING REGULATIONS:
+{1}
+
+🌊 OPTIMAL TIDE TIMES (Next 3 Days):
+{2}
+
+⚠️ SAFETY ASSESSMENT:
+Risk Level: {3}
+Recent Incidents (30 days): {4}
+Details: {5}
+
+Please provide:
+1. REGULATIONS SUMMARY: Key rules for {6} in {7} (bag limits, size requirements)
+2. OPTIMAL TIMING: Best 3 tide times with specific recommendations
+3. SAFETY ADVICE: Current risk assessment and safety precautions
+4. TRIP PLAN: Day-by-day fishing strategy combining all factors
+5. COMPLIANCE CHECKLIST: What to remember for legal, safe fishing
+
+Format as a practical, actionable fishing guide.',
+            user_question,
+            fishing_regulations,
+            optimal_tide_times,
+            safety_rating,
+            safety_incidents,
+            COALESCE(safety_details, 'No major incidents reported'),
+            target_species,
+            target_location
+        )
+    ) as comprehensive_fishing_plan,
+    
+    -- Raw data for app developers
+    fishing_regulations as raw_regulations_data,
+    optimal_tide_times as raw_tide_data,
+    safety_rating as raw_safety_rating
+FROM comprehensive_context;
+
+-- =============================================
+-- 🚀 HACKATHON INSPIRATION: What You Can Build!
+-- =============================================
+/*
+💡 This single query demonstrates:
+
+✅ RAG-POWERED REGULATIONS: Semantic search through PDF fishing rules
+✅ REAL-TIME TIDE DATA: Optimal fishing times with tidal predictions  
+✅ SAFETY INTELLIGENCE: Maritime incident analysis for risk assessment
+✅ GEOSPATIAL AWARENESS: Location-specific recommendations
+✅ AI SYNTHESIS: Complex multi-source data into actionable advice
+
+🎯 Streamlit App Ideas:
+- Interactive fishing trip planner with maps
+- Species-specific regulation lookup
+- Real-time safety alerts for marine areas
+- Tide prediction calendar with fishing recommendations
+- Compliance checker for your catch
+- Social fishing platform with shared trip reports
+
+🔥 Advanced Features You Can Add:
+- Weather API integration (MetService)
+- Moon phase calculations for optimal feeding
+- Fish species AI identification from photos
+- Community-driven fishing spot ratings
+- Push notifications for optimal fishing windows
+- Integration with fishing license validation
+
+The power of Snowflake: Complex questions → Intelligent answers in ONE QUERY! 🎣
+*/
 
 -- =============================================
 -- 10. NEXT STEPS FOR PARTICIPANTS
