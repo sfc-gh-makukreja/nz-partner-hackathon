@@ -635,7 +635,7 @@ safety_assessment AS (
         COUNT(*) as total_incidents_last_30_days,
         COUNT(CASE WHEN mi.incident_severity = 'Critical' THEN 1 END) as critical_incidents,
         COUNT(CASE WHEN mi.incident_severity = 'Major' THEN 1 END) as major_incidents,
-        LISTAGG(DISTINCT mi.what_happened, '; ') WITHIN GROUP (ORDER BY mi.event_date DESC) as recent_incident_types,
+        LISTAGG(DISTINCT mi.what_happened, '; ') as recent_incident_types,
         CASE 
             WHEN COUNT(CASE WHEN mi.incident_severity IN ('Critical', 'Major') THEN 1 END) = 0 THEN 'Low Risk'
             WHEN COUNT(CASE WHEN mi.incident_severity IN ('Critical', 'Major') THEN 1 END) <= 2 THEN 'Moderate Risk'
