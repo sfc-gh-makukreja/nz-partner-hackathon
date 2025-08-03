@@ -647,33 +647,81 @@ safety_assessment AS (
     GROUP BY ufq.target_location
 ),
 
-comprehensive_context AS (
-    -- Combine all data sources into rich context
+q1_regulations AS (
     SELECT 
         rs.user_question,
         rs.target_location,
         rs.target_species,
-        -- Regulations context
         ARRAY_TO_STRING(
             ARRAY_AGG(r.value:chunk_text::STRING) WITHIN GROUP (ORDER BY r.index),
             '\n\n---REGULATION---\n\n'
-        ) as fishing_regulations,
-        -- Best tide times
+        ) as regulations_text
+    FROM regulation_search rs,
+    LATERAL FLATTEN(input => rs.regulation_results) r
+    GROUP BY rs.user_question, rs.target_location, rs.target_species
+),
+
+q2_tides AS (
+    SELECT 
+        q1.*,
         ARRAY_TO_STRING(
             ARRAY_AGG(
                 ot.date::STRING || ' at ' || ot.tide_time || ' (' || ot.tide_height_m || 'm) - ' || ot.fishing_quality
             ) WITHIN GROUP (ORDER BY ot.date, ot.daily_rank),
             '\n'
-        ) as optimal_tide_times,
-        -- Safety information
-        MAX(sa.safety_rating) as safety_rating,
-        MAX(sa.total_incidents_last_30_days) as safety_incidents,
-        MAX(sa.recent_incident_types) as safety_details
-    FROM regulation_search rs,
-    LATERAL FLATTEN(input => rs.regulation_results) r
+        ) as tides_text
+    FROM q1_regulations q1
     CROSS JOIN (SELECT * FROM optimal_tides WHERE daily_rank <= 3) ot
+    GROUP BY q1.user_question, q1.target_location, q1.target_species, q1.regulations_text
+),
+
+q3_safety AS (
+    SELECT 
+        q2.*,
+        sa.safety_rating,
+        sa.total_incidents_last_30_days,
+        COALESCE(sa.recent_incident_types, 'No major incidents reported') as safety_details
+    FROM q2_tides q2
     CROSS JOIN safety_assessment sa
-    GROUP BY rs.user_question, rs.target_location, rs.target_species
+),
+
+p1_regulations_prompt AS (
+    SELECT 
+        q3.*,
+        PROMPT(
+            'Fishing Question: {0}\nTarget Species: {1} in {2}\n\n🎣 FISHING REGULATIONS:\n{3}',
+            user_question,
+            target_species,
+            target_location,
+            regulations_text
+        ) as prompt_with_regulations
+    FROM q3_safety q3
+),
+
+p2_tides_prompt AS (
+    SELECT 
+        p1.*,
+        PROMPT(
+            '{0}\n\n🌊 OPTIMAL TIDE TIMES (Next 3 Days):\n{1}',
+            prompt_with_regulations,
+            tides_text
+        ) as prompt_with_tides
+    FROM p1_regulations_prompt p1
+),
+
+comprehensive_context AS (
+    SELECT 
+        p2.*,
+        PROMPT(
+            '{0}\n\n⚠️ SAFETY ASSESSMENT:\nRisk Level: {1}\nRecent Incidents (30 days): {2}\nDetails: {3}\n\nPlease provide:\n1. REGULATIONS SUMMARY: Key rules for {4} in {5} (bag limits, size requirements)\n2. OPTIMAL TIMING: Best 3 tide times with specific recommendations\n3. SAFETY ADVICE: Current risk assessment and safety precautions\n4. TRIP PLAN: Day-by-day fishing strategy combining all factors\n5. COMPLIANCE CHECKLIST: What to remember for legal, safe fishing\n\nFormat as a practical, actionable fishing guide.',
+            prompt_with_tides,
+            safety_rating,
+            total_incidents_last_30_days,
+            safety_details,
+            target_species,
+            target_location
+        ) as final_prompt
+    FROM p2_tides_prompt p2
 )
 
 SELECT 
@@ -681,46 +729,17 @@ SELECT
     target_location,
     target_species,
     user_question,
-    -- AI-powered comprehensive trip planning advice
+    -- AI synthesis using progressively built prompt
     SNOWFLAKE.CORTEX.COMPLETE(
         'mistral-large2',
-        PROMPT(
-            'You are an expert New Zealand fishing guide. Based on the comprehensive data below, provide a complete fishing trip plan for: {0}
-
-🎣 FISHING REGULATIONS:
-{1}
-
-🌊 OPTIMAL TIDE TIMES (Next 3 Days):
-{2}
-
-⚠️ SAFETY ASSESSMENT:
-Risk Level: {3}
-Recent Incidents (30 days): {4}
-Details: {5}
-
-Please provide:
-1. REGULATIONS SUMMARY: Key rules for {6} in {7} (bag limits, size requirements)
-2. OPTIMAL TIMING: Best 3 tide times with specific recommendations
-3. SAFETY ADVICE: Current risk assessment and safety precautions
-4. TRIP PLAN: Day-by-day fishing strategy combining all factors
-5. COMPLIANCE CHECKLIST: What to remember for legal, safe fishing
-
-Format as a practical, actionable fishing guide.',
-            user_question,
-            fishing_regulations,
-            optimal_tide_times,
-            safety_rating,
-            safety_incidents,
-            COALESCE(safety_details, 'No major incidents reported'),
-            target_species,
-            target_location
-        )
+        final_prompt
     ) as comprehensive_fishing_plan,
     
     -- Raw data for app developers
-    fishing_regulations as raw_regulations_data,
-    optimal_tide_times as raw_tide_data,
-    safety_rating as raw_safety_rating
+    regulations_text as raw_regulations_data,
+    tides_text as raw_tide_data,
+    safety_rating as raw_safety_rating,
+    final_prompt as debug_prompt
 FROM comprehensive_context;
 
 -- =============================================
