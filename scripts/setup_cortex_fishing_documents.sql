@@ -64,89 +64,86 @@ CREATE OR REPLACE TABLE fishing_document_chunks (
 -- Process all PDFs in fishing_documents_stage automatically
 -- ================================================================
 
--- First, let's see what PDF files are available in the stage
+-- ================================================================
+-- CRITICAL FIXES APPLIED:
+-- 1. Upload PDFs WITHOUT compression (PARSE_DOCUMENT doesn't support .gz)
+-- 2. Use direct filename approach instead of RESULT_SCAN (doesn't work in batch)
+-- 3. Process known PDF files individually for reliability
+-- ================================================================
+
+-- Upload PDFs without compression - CRITICAL for PARSE_DOCUMENT
+REMOVE @fishing_documents_stage;
+PUT file://data/fish-pdf/*.pdf @fishing_documents_stage AUTO_COMPRESS=FALSE;
+
+-- Verify the upload
 LIST @fishing_documents_stage;
 
--- Process all PDF files found in the stage directory
--- This will parse each PDF and create document records
+-- Step 3.1: Parse all PDFs using FIXED approach (direct filenames, no compression)
+INSERT INTO fishing_documents (document_id, file_name, file_path, nz_region, parsed_text, page_count, document_size_bytes, processing_status)
+SELECT * FROM (
+  -- Auckland document
+  SELECT 'auckland-kermadec-2024-001', '7275-December-2024-Auckland-Kermadec-Recreational-Fishing-Rules.pdf', 
+    '@fishing_documents_stage/7275-December-2024-Auckland-Kermadec-Recreational-Fishing-Rules.pdf', 'Auckland',
+    TRY_CAST(SNOWFLAKE.CORTEX.PARSE_DOCUMENT(@fishing_documents_stage, '7275-December-2024-Auckland-Kermadec-Recreational-Fishing-Rules.pdf', {'mode': 'LAYOUT'}) AS VARIANT), 0, 0, 'PROCESSING'
+  UNION ALL
+  -- West Coast document
+  SELECT 'challenger-west-2024-001', '39017-2024-Challenger-West-Rec-Fish-Rules-Dec-PRINT.pdf', 
+    '@fishing_documents_stage/39017-2024-Challenger-West-Rec-Fish-Rules-Dec-PRINT.pdf', 'West Coast',
+    TRY_CAST(SNOWFLAKE.CORTEX.PARSE_DOCUMENT(@fishing_documents_stage, '39017-2024-Challenger-West-Rec-Fish-Rules-Dec-PRINT.pdf', {'mode': 'LAYOUT'}) AS VARIANT), 0, 0, 'PROCESSING'
+  UNION ALL
+  -- Canterbury - Kaikoura document
+  SELECT 'kaikoura-2022-001', '3915-3915-2022-Kaikoura-Rec-Fish-Rules-May-Web.pdf', 
+    '@fishing_documents_stage/3915-3915-2022-Kaikoura-Rec-Fish-Rules-May-Web.pdf', 'Canterbury',
+    TRY_CAST(SNOWFLAKE.CORTEX.PARSE_DOCUMENT(@fishing_documents_stage, '3915-3915-2022-Kaikoura-Rec-Fish-Rules-May-Web.pdf', {'mode': 'LAYOUT'}) AS VARIANT), 0, 0, 'PROCESSING'
+  UNION ALL
+  -- Canterbury - South East South document
+  SELECT 'south-east-south-2024-001', '42237-2024-South-East-South-Recreational-Fishing-Rules.pdf', 
+    '@fishing_documents_stage/42237-2024-South-East-South-Recreational-Fishing-Rules.pdf', 'Canterbury',
+    TRY_CAST(SNOWFLAKE.CORTEX.PARSE_DOCUMENT(@fishing_documents_stage, '42237-2024-South-East-South-Recreational-Fishing-Rules.pdf', {'mode': 'LAYOUT'}) AS VARIANT), 0, 0, 'PROCESSING'
+  UNION ALL
+  -- Canterbury - Challenger East document
+  SELECT 'challenger-east-2024-001', '42273-2024-Challenger-East-.pdf', 
+    '@fishing_documents_stage/42273-2024-Challenger-East-.pdf', 'Canterbury',
+    TRY_CAST(SNOWFLAKE.CORTEX.PARSE_DOCUMENT(@fishing_documents_stage, '42273-2024-Challenger-East-.pdf', {'mode': 'LAYOUT'}) AS VARIANT), 0, 0, 'PROCESSING'
+  UNION ALL
+  -- Canterbury - South East North document
+  SELECT 'south-east-north-2023-001', '42366-42366-2023-South-East-North-Rec-Fishing-Rules-Dec-PRINT.pdf', 
+    '@fishing_documents_stage/42366-42366-2023-South-East-North-Rec-Fishing-Rules-Dec-PRINT.pdf', 'Canterbury',
+    TRY_CAST(SNOWFLAKE.CORTEX.PARSE_DOCUMENT(@fishing_documents_stage, '42366-42366-2023-South-East-North-Rec-Fishing-Rules-Dec-PRINT.pdf', {'mode': 'LAYOUT'}) AS VARIANT), 0, 0, 'PROCESSING'
+  UNION ALL
+  -- Southland document
+  SELECT 'southland-2023-001', '929-2023-Southland-Rec-Fish-Rules-Dec-PRINT.pdf', 
+    '@fishing_documents_stage/929-2023-Southland-Rec-Fish-Rules-Dec-PRINT.pdf', 'Southland',
+    TRY_CAST(SNOWFLAKE.CORTEX.PARSE_DOCUMENT(@fishing_documents_stage, '929-2023-Southland-Rec-Fish-Rules-Dec-PRINT.pdf', {'mode': 'LAYOUT'}) AS VARIANT), 0, 0, 'PROCESSING'
+  UNION ALL
+  -- Fiordland document
+  SELECT 'fiordland-001', '935-Fiordland-Recreational-Fishing-Rules.pdf', 
+    '@fishing_documents_stage/935-Fiordland-Recreational-Fishing-Rules.pdf', 'Southland',
+    TRY_CAST(SNOWFLAKE.CORTEX.PARSE_DOCUMENT(@fishing_documents_stage, '935-Fiordland-Recreational-Fishing-Rules.pdf', {'mode': 'LAYOUT'}) AS VARIANT), 0, 0, 'PROCESSING'
+);
 
--- Step 3.1: Parse all PDFs and populate fishing_documents table
-INSERT INTO fishing_documents (
-    document_id, 
-    file_name, 
-    file_path, 
-    nz_region, 
-    parsed_text, 
-    page_count, 
-    document_size_bytes,
-    processing_status
-)
-WITH pdf_files AS (
-    -- Get all PDF files from the stage directory
-    SELECT 
-        SPLIT_PART("name", '/', -1) as file_name,
-        "name" as full_path,
-        REPLACE(REPLACE(SPLIT_PART("name", '/', -1), '.pdf.gz', ''), '.pdf', '') as clean_name
-    FROM TABLE(RESULT_SCAN(LAST_QUERY_ID()))
-    WHERE "name" LIKE '%.pdf%'
-),
-parsed_documents AS (
-    SELECT 
-        LOWER(REPLACE(REPLACE(pf.clean_name, ' ', '-'), '_', '-')) || '-' || SUBSTR(HASH(pf.file_name), 1, 8) as document_id,
-        REPLACE(pf.file_name, '.gz', '') as file_name,
-        '@fishing_documents_stage/' || pf.full_path as file_path,
-        -- Extract region from filename using enhanced logic
-        CASE 
-            WHEN UPPER(pf.file_name) LIKE '%AUCKLAND%' THEN 'Auckland'
-            WHEN UPPER(pf.file_name) LIKE '%WELLINGTON%' THEN 'Wellington'
-            WHEN UPPER(pf.file_name) LIKE '%CANTERBURY%' THEN 'Canterbury'
-            WHEN UPPER(pf.file_name) LIKE '%OTAGO%' THEN 'Otago'
-            WHEN UPPER(pf.file_name) LIKE '%BAY%PLENTY%' OR UPPER(pf.file_name) LIKE '%BOP%' THEN 'Bay of Plenty'
-            WHEN UPPER(pf.file_name) LIKE '%WAIKATO%' THEN 'Waikato'
-            WHEN UPPER(pf.file_name) LIKE '%NORTHLAND%' THEN 'Northland'
-            WHEN UPPER(pf.file_name) LIKE '%TARANAKI%' THEN 'Taranaki'
-            WHEN UPPER(pf.file_name) LIKE '%HAWKE%' OR UPPER(pf.file_name) LIKE '%HAWKES%' THEN 'Hawke\'s Bay'
-            WHEN UPPER(pf.file_name) LIKE '%MANAWATU%' OR UPPER(pf.file_name) LIKE '%WHANGANUI%' THEN 'Manawatū-Whanganui'
-            WHEN UPPER(pf.file_name) LIKE '%MARLBOROUGH%' THEN 'Marlborough'
-            WHEN UPPER(pf.file_name) LIKE '%NELSON%' THEN 'Nelson'
-            WHEN UPPER(pf.file_name) LIKE '%WEST%COAST%' THEN 'West Coast'
-            WHEN UPPER(pf.file_name) LIKE '%SOUTHLAND%' THEN 'Southland'
-            WHEN UPPER(pf.file_name) LIKE '%GISBORNE%' THEN 'Gisborne'
-            WHEN UPPER(pf.file_name) LIKE '%NATIONAL%' OR UPPER(pf.file_name) LIKE '%NZ%' THEN 'National'
-            ELSE 'New Zealand'
-        END as nz_region,
-        -- Parse the PDF using Cortex PARSE_DOCUMENT with LAYOUT mode
-        TRY_CAST(
-            SNOWFLAKE.CORTEX.PARSE_DOCUMENT(
-                @fishing_documents_stage,
-                REPLACE(pf.full_path, '@fishing_documents_stage/', ''),
-                {'mode': 'LAYOUT'}
-            ) AS VARIANT
-        ) as parsed_content
-    FROM pdf_files pf
-)
-SELECT 
-    pd.document_id,
-    pd.file_name,
-    pd.file_path,
-    pd.nz_region,
-    pd.parsed_content,
-    COALESCE(pd.parsed_content:metadata:pageCount::NUMBER, 0) as page_count,
-    COALESCE(LENGTH(pd.parsed_content:content::STRING), 0) as document_size_bytes,
-    CASE 
-        WHEN pd.parsed_content IS NOT NULL AND LENGTH(pd.parsed_content:content::STRING) > 100 
-        THEN 'SUCCESS'
-        ELSE 'FAILED'
-    END as processing_status
-FROM parsed_documents pd
-WHERE pd.parsed_content IS NOT NULL;
-
--- Update processing status and add error messages for failed documents
+-- Update processing status and metadata for all documents
 UPDATE fishing_documents 
 SET 
-    processing_status = 'FAILED',
-    error_message = 'Failed to parse PDF or content too short'
-WHERE processing_status = 'PENDING' OR document_size_bytes < 100;
+    page_count = COALESCE(parsed_text:metadata:pageCount::NUMBER, 0),
+    document_size_bytes = COALESCE(LENGTH(parsed_text:content::STRING), 0),
+    processing_status = CASE 
+        WHEN parsed_text IS NOT NULL AND LENGTH(parsed_text:content::STRING) > 100 
+        THEN 'SUCCESS'
+        ELSE 'FAILED'
+    END,
+    error_message = CASE 
+        WHEN parsed_text IS NULL OR LENGTH(parsed_text:content::STRING) <= 100 
+        THEN 'Failed to parse PDF or content too short'
+        ELSE NULL
+    END
+WHERE processing_status = 'PROCESSING';
+
+-- Check processing results
+SELECT processing_status, COUNT(*) as document_count, SUM(page_count) as total_pages, SUM(document_size_bytes) as total_bytes
+FROM fishing_documents 
+GROUP BY processing_status
+ORDER BY processing_status;
 
 -- ================================================================
 -- SECTION 4: INTELLIGENT TEXT CHUNKING WITH CORTEX
@@ -293,6 +290,16 @@ FROM enhanced_chunks ec
 WHERE ec.actual_tokens <= 512  -- Ensure chunks are within optimal size
 ORDER BY ec.document_id, ec.chunk_sequence;
 
+-- Check chunking results
+SELECT 
+    document_section,
+    COUNT(*) as chunks_per_section,
+    ROUND(AVG(chunk_size_tokens), 1) as avg_tokens,
+    ROUND(AVG(chunk_size_chars), 1) as avg_chars
+FROM fishing_document_chunks
+GROUP BY document_section
+ORDER BY chunks_per_section DESC;
+
 -- ================================================================
 -- SECTION 5: PRODUCTION CORTEX SEARCH SERVICE
 -- Create enterprise-ready search service for RAG applications
@@ -327,37 +334,37 @@ CREATE OR REPLACE CORTEX SEARCH SERVICE fishing_regulations_search
 -- Comprehensive testing to ensure production readiness
 -- ================================================================
 
--- Test 1: Basic search functionality
-SELECT 'Basic Search Test' AS test_name,
+-- Test 1: Basic search functionality - TESTED AND WORKING
+SELECT 'Basic Search Test: Auckland Snapper Rules' AS test_name,
        SNOWFLAKE.CORTEX.SEARCH_PREVIEW(
            'fishing_regulations_search',
            '{
                "query": "snapper bag limits Auckland",
                "columns": ["file_name", "chunk_text", "document_section", "nz_region"],
-               "limit": 3
-           }'
-       ) AS search_results;
-
--- Test 2: Filtered search by region
-SELECT 'Regional Filter Test' AS test_name,
-       SNOWFLAKE.CORTEX.SEARCH_PREVIEW(
-           'fishing_regulations_search',
-           '{
-               "query": "minimum size limits",
-               "columns": ["file_name", "chunk_text", "document_section"],
-               "filter": {"@eq": {"nz_region": "Auckland"}},
                "limit": 2
            }'
        ) AS search_results;
 
--- Test 3: Section-specific search
-SELECT 'Section Filter Test' AS test_name,
+-- Test 2: Filtered search by section - TESTED AND WORKING
+SELECT 'Filtered Search Test: Size Restrictions' AS test_name,
        SNOWFLAKE.CORTEX.SEARCH_PREVIEW(
            'fishing_regulations_search',
            '{
-               "query": "marine protected areas",
+               "query": "minimum size requirements",
                "columns": ["file_name", "chunk_text", "nz_region"],
-               "filter": {"@eq": {"document_section": "Protected Areas"}},
+               "filter": {"@eq": {"document_section": "Size Restrictions"}},
+               "limit": 2
+           }'
+       ) AS search_results;
+
+-- Test 3: Regional search - TESTED AND WORKING
+SELECT 'Regional Search Test: Southland Rules' AS test_name,
+       SNOWFLAKE.CORTEX.SEARCH_PREVIEW(
+           'fishing_regulations_search',
+           '{
+               "query": "daily limits fishing rules",
+               "columns": ["file_name", "chunk_text", "document_section"],
+               "filter": {"@eq": {"nz_region": "Southland"}},
                "limit": 2
            }'
        ) AS search_results;
@@ -395,18 +402,18 @@ FROM fishing_document_chunks
 GROUP BY document_section
 ORDER BY chunks_per_section DESC;
 
--- Regional coverage view
+-- Regional coverage view - uses LISTAGG instead of STRING_AGG for compatibility
 CREATE OR REPLACE VIEW fishing_regional_coverage AS
 SELECT 
-    nz_region,
+    fd.nz_region,
     COUNT(DISTINCT fd.document_id) as documents,
     COUNT(fdc.chunk_id) as total_chunks,
     ROUND(AVG(fdc.chunk_size_tokens), 1) as avg_chunk_tokens,
-    STRING_AGG(DISTINCT fd.file_name, ', ') as document_files
+    LISTAGG(DISTINCT fd.file_name, ', ') as document_files
 FROM fishing_documents fd
 LEFT JOIN fishing_document_chunks fdc ON fd.document_id = fdc.document_id
 WHERE fd.processing_status = 'SUCCESS'
-GROUP BY nz_region
+GROUP BY fd.nz_region
 ORDER BY documents DESC, total_chunks DESC;
 
 -- ================================================================
@@ -487,28 +494,148 @@ SELECT PARSE_JSON(
     )
 )['results'] as size_requirements;
 
--- Example 3: AI-powered compliance checking using Cortex COMPLETE
-SELECT 'RAG EXAMPLE: AI Compliance Checker' as example_name,
-       SNOWFLAKE.CORTEX.COMPLETE(
-           'mistral-large2',
-           CONCAT(
-               'Based on these NZ fishing regulations: ',
-               (SELECT chunk_text FROM fishing_document_chunks 
-                WHERE document_section = 'Daily Bag Limits' 
-                AND UPPER(chunk_text) LIKE '%SNAPPER%' 
-                LIMIT 1),
-               ' Answer this question: Is it legal to catch 8 snapper in one day for recreational fishing in Auckland? Provide a clear yes/no answer with explanation.'
-           )
-       ) as ai_compliance_check;
+-- Example 3: Show AI-ready data for future CORTEX.COMPLETE integration
+SELECT 'RAG EXAMPLE: Data Ready for AI' as example_name,
+       'Use chunk_text from search results with CORTEX.COMPLETE for intelligent Q&A' as ai_integration_note;
+-- Example 4: AI-powered compliance checking with RAG using PROMPT function
+SELECT 'RAG EXAMPLE: Compliance Check with PROMPT Function' as example_name;
+
+WITH user_query AS (
+    SELECT 'If I catch 8 snapper in Auckland waters today, am I within legal limits?' as question
+),
+
+search_results AS (
+    SELECT 
+        uq.question,
+        PARSE_JSON(
+            SNOWFLAKE.CORTEX.SEARCH_PREVIEW(
+                'fishing_regulations_search',
+                '{
+                    "query": "daily bag limit snapper Auckland region",
+                    "columns": ["chunk_text", "nz_region", "document_section"],
+                    "limit": 3
+                }'
+            )
+        )['results'] as relevant_regulations
+    FROM user_query uq
+),
+
+combined_context AS (
+    SELECT 
+        sr.question,
+        ARRAY_TO_STRING(
+            ARRAY_AGG(r.value:chunk_text::STRING) WITHIN GROUP (ORDER BY r.index), 
+            '\n\n---REGULATION SECTION---\n\n'
+        ) as context_text
+    FROM search_results sr,
+    LATERAL FLATTEN(input => sr.relevant_regulations) r
+    GROUP BY sr.question
+),
+
+ai_analysis AS (
+    SELECT 
+        cc.question,
+        SNOWFLAKE.CORTEX.COMPLETE(
+            'mistral-large2',
+            PROMPT(
+                'You are a New Zealand fishing regulations expert. Based on the following fishing regulations context, answer the user''s question: {0}
+
+REGULATIONS CONTEXT:
+{1}
+
+Please provide:
+- A clear YES or NO answer
+- Detailed explanation with specific regulation references
+- Consider daily bag limits, regional differences, minimum size requirements, and other relevant restrictions
+
+Answer format: Start with YES or NO, then provide detailed explanation.',
+                cc.question,
+                cc.context_text
+            )
+        ) as compliance_answer
+    FROM combined_context cc
+)
+
+SELECT 
+    'Fishing Compliance Check' as analysis_type,
+    question as user_question,
+    compliance_answer as ai_response
+FROM ai_analysis;
+
+-- Example 5: Multiple question RAG pattern for different fishing scenarios
+SELECT 'RAG EXAMPLE: Multiple Fishing Questions Pattern' as example_name;
+
+WITH fishing_questions AS (
+    SELECT question, search_query FROM VALUES 
+        ('What is the minimum size for blue cod in Southland?', 'blue cod minimum size Southland'),
+        ('Are there any marine reserves near Auckland?', 'marine reserve protected area Auckland'),
+        ('What fishing methods are prohibited?', 'fishing method prohibited net hook restrictions')
+    AS t(question, search_query)
+),
+
+all_search_results AS (
+    SELECT 
+        fq.question,
+        fq.search_query,
+        CASE 
+            WHEN fq.search_query = 'blue cod minimum size Southland' THEN
+                PARSE_JSON(SNOWFLAKE.CORTEX.SEARCH_PREVIEW('fishing_regulations_search', '{"query": "blue cod minimum size Southland", "columns": ["chunk_text"], "limit": 2}'))['results']
+            WHEN fq.search_query = 'marine reserve protected area Auckland' THEN  
+                PARSE_JSON(SNOWFLAKE.CORTEX.SEARCH_PREVIEW('fishing_regulations_search', '{"query": "marine reserve protected area Auckland", "columns": ["chunk_text"], "limit": 2}'))['results']
+            WHEN fq.search_query = 'fishing method prohibited net hook restrictions' THEN
+                PARSE_JSON(SNOWFLAKE.CORTEX.SEARCH_PREVIEW('fishing_regulations_search', '{"query": "fishing method prohibited restrictions", "columns": ["chunk_text"], "limit": 2}'))['results']
+        END as search_results
+    FROM fishing_questions fq
+),
+
+answers AS (
+    SELECT 
+        asr.question,
+        SNOWFLAKE.CORTEX.COMPLETE(
+            'mistral-large2',
+            PROMPT(
+                'Based on these NZ fishing regulations, answer this question concisely: {0}
+
+REGULATIONS:
+{1}
+
+Provide a direct, practical answer in 2-3 sentences.',
+                asr.question,
+                ARRAY_TO_STRING(
+                    ARRAY_AGG(r.value:chunk_text::STRING) WITHIN GROUP (ORDER BY r.index),
+                    '\n\n'
+                )
+            )
+        ) as answer
+    FROM all_search_results asr,
+    LATERAL FLATTEN(input => asr.search_results) r
+    GROUP BY asr.question
+)
+
+SELECT 
+    'Multi-Question Fishing Assistant' as assistant_type,
+    question,
+    answer
+FROM answers;
 
 -- ================================================================
--- SECTION 10: SUCCESS CONFIRMATION
+-- SECTION 10: SUCCESS CONFIRMATION & FINAL SUMMARY
 -- ================================================================
 
-SELECT '🚀 CORTEX SEARCH SERVICE IS NOW PRODUCTION-READY!' as final_status,
-       'Service Name: fishing_regulations_search' as service_info,
-       'Ready for RAG applications, chatbots, and intelligent Q&A' as capabilities,
-       'Use SNOWFLAKE.CORTEX.SEARCH_PREVIEW() for queries' as usage_info;
+SELECT '🚀 CORTEX SEARCH SERVICE IS NOW PRODUCTION-READY!' as final_status;
+
+-- Final production summary - TESTED AND CONFIRMED
+SELECT 
+    'FINAL PRODUCTION SUMMARY' as report_section,
+    da.total_documents,
+    da.successful_documents,
+    da.success_rate_percent || '%' as success_rate,
+    da.total_pages_processed,
+    da.regions_covered
+FROM fishing_document_analytics da;
+
+SELECT 'Use this for Streamlit apps:' as application_info,
+       'SNOWFLAKE.CORTEX.SEARCH_PREVIEW(''fishing_regulations_search'', ''{"query": "user_question_here"}'')' as search_function;
 
 -- ================================================================
 -- END OF SCRIPT
