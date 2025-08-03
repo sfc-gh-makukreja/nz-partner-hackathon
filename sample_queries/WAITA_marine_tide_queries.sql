@@ -669,8 +669,8 @@ comprehensive_context AS (
         MAX(sa.safety_rating) as safety_rating,
         MAX(sa.total_incidents_last_30_days) as safety_incidents,
         MAX(sa.recent_incident_types) as safety_details
-    FROM regulation_search rs
-    JOIN LATERAL FLATTEN(input => rs.regulation_results) r ON TRUE
+    FROM regulation_search rs,
+    LATERAL FLATTEN(input => rs.regulation_results) r
     CROSS JOIN (SELECT * FROM optimal_tides WHERE daily_rank <= 3) ot
     CROSS JOIN safety_assessment sa
     GROUP BY rs.user_question, rs.target_location, rs.target_species
