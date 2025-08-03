@@ -1,202 +1,173 @@
 # NZ Partner Hackathon 🇳🇿 - AI Data Platform
 
-**Complete water risk intelligence and energy analytics platform for AI innovation**
-
 This repository contains production-ready datasets and sample queries for Snowflake AI hackathon participants, organized by Matariki themes.
 
-## 📈 Current Hackathon Status
+## 📈 Current Status
 
-| Theme | Status | Total Records | Key Datasets | Ready For |
-|-------|---------|---------------|--------------|-----------|
-| ⚡ **URU_RANGI** | ✅ **COMPLETE** | **8,465** | 5-min electricity demand, fuel mix, quarterly trends | Energy AI, grid optimization, renewable forecasting |
-| 🌊 **WAIPUNA_RANGI** | ✅ **COMPLETE** | **5,776** | Climate data (89 years), flood mapping, disaster costs | Water risk AI, flood prediction, climate adaptation |
-| 🌾 **TIPUĀNUKU** | 🔄 Pending | - | Food/agriculture data needed | Agricultural AI projects |
-| 🌊 **WAITA** | ✅ **COMPLETE** | **31,314** | LINZ tide predictions + Maritime NZ incidents + PDF document processing + comprehensive RAG fishing planner | Marine AI, safety analytics, intelligent document Q&A |
-| ✈️ **HIWA_I_TE_RANGI** | 🔄 Pending | - | Travel/tourism data needed | Tourism AI projects |
+| Theme | Status | Total Records | Data Coverage | Sample Queries |
+|-------|---------|---------------|---------------|----------------|
+| ⚡ **URU_RANGI** | ✅ **COMPLETE** | **8,465** | 5-min electricity demand, fuel mix (1974-2030), quarterly trends | [`URU_RANGI_wind_energy_queries.sql`](sample_queries/URU_RANGI_wind_energy_queries.sql) |
+| 🌊 **WAIPUNA_RANGI** | ✅ **COMPLETE** | **5,776** | Climate data (89 years), flood mapping, disaster costs | [`WAIPUNA_RANGI_climate_queries.sql`](sample_queries/WAIPUNA_RANGI_climate_queries.sql) |
+| 🌊 **WAITA** | ✅ **COMPLETE** | **31,314** | LINZ tide predictions, maritime incidents, PDF RAG system | [`WAITA_marine_tide_queries.sql`](sample_queries/WAITA_marine_tide_queries.sql) |
+| 🌾 **TIPUĀNUKU** | 🔄 **Template Ready** | - | Template queries prepared for agriculture data | [`TIPUANUKU_food_agriculture_queries.sql`](sample_queries/TIPUANUKU_food_agriculture_queries.sql) |
+| ✈️ **HIWA_I_TE_RANGI** | 🔄 **Schema Only** | - | Schema created, awaiting tourism/travel data | *No queries yet* |
+| 🏛️ **FOUNDATIONAL** | 🔄 **Schema Only** | - | Schema created, awaiting socio-economic data | *No queries yet* |
 
-### 🚀 **Ready for AI Innovation:**
-- **3 Complete Themes** with production data
-- **45,158 Total Records** across climate, energy, marine safety, and financial datasets  
-- **Real Government Data** from MBIE, Transpower, NIWA, ICNZ, LINZ, Maritime NZ
+### 🚀 **Production Ready:**
+- **3 Complete Themes** with verified data and working queries
+- **45,555 Total Records** across climate, energy, marine safety, and financial datasets  
+- **Real Government Data** from MBIE, Transpower, NIWA, ICNZ, LINZ, Maritime NZ, Fisheries NZ
 - **Snowflake Cortex AI** examples with verified Asia Pacific availability
+- **RAG Document Processing** operational with PDF fishing regulations
 
-## Available Themes & Data
+---
 
-### ✅ URU_RANGI (Wind & Energy) - **DATA AVAILABLE**
-- **File**: `URU_RANGI_wind_energy_queries.sql`
-- **Data**: Complete electricity dataset with real NZ government data
-- **Tables**: 
-  - `electricity_zone_data_5min` - 5-minute interval demand by 14 geographic zones (8,345 rows, July 2024)
-    - **Source**: [Transpower Live Load Data](https://www.transpower.co.nz/system-operator/live-system-and-market-data/live-load-data#download)
-    - **File**: `Zone Data (01 Jul - 29 Jul) [5 intervals] (1).csv`
-  - `electricity_generation_by_fuel` - Annual renewable vs fossil fuel breakdown (19 years, 1974-2030)
-    - **Source**: [MBIE Electricity Statistics](https://www.mbie.govt.nz/building-and-energy/energy-and-natural-resources/energy-statistics-and-modelling/energy-statistics/electricity-statistics)
-    - **File**: `electricity-2025-q1.xlsx` (processed)
-  - `electricity_quarterly_generation` - Historical quarterly generation trends (101 quarters, 2000-2025)
-    - **Source**: [MBIE Electricity Statistics](https://www.mbie.govt.nz/building-and-energy/energy-and-natural-resources/energy-statistics-and-modelling/energy-statistics/electricity-statistics)
-    - **File**: `electricity-2025-q1.xlsx` (processed)
-- **Sample Queries**:
-  | Category | Status | Sample Results |
-  | -------- | ------ | -------------- |
-  | Exploratory Queries | ✅ Working | 8,345 zone records, 19 fuel years, 101 quarters |
-  | Peak Demand Analysis | ✅ Working | Hourly patterns, weekend vs weekday trends |
-  | Regional Analysis | ✅ Working | Auckland: 930MW avg, Wellington: 413MW avg |
-  | Renewable Trends | ✅ Working | 90.48% renewable in 2023, 4.96% improvement in 2022 |
-  | AI/ML Features | ✅ Working | Lag features, rolling averages, time features |
-  | Wind Energy Analysis | ✅ Working | Wellington 23.3% variability, Taranaki 17.4% |
-  | Cortex AI | ✅ Working | Generated comprehensive optimization strategies |
-  | Business Insights | ✅ Working | Grid stability, load forecasting, correlations |
+## 🎯 Theme Details & Infrastructure
 
-- **Use Cases**: Peak demand prediction, renewable optimization, grid planning
+### ⚡ URU_RANGI (Wind & Energy) - **✅ PRODUCTION READY**
 
-### 🔄 TIPUĀNUKU (Food & Agriculture) - **COMING SOON**
-- **Status**: Awaiting food/agriculture dataset upload
-- **Planned Data**: Production data, restaurant reviews, supply chain, nutrition
-- **Planned Sources**: Stats NZ agriculture data, MPI food safety data, local council data
-- **Sample Queries**: Will be created once data is loaded
+**Raw Data Sources:**
+- [Transpower Live Load Data](https://www.transpower.co.nz/system-operator/live-system-and-market-data/live-load-data#download) → `Zone Data (01 Jul - 29 Jul) [5 intervals] (1).csv`
+- [MBIE Electricity Statistics](https://www.mbie.govt.nz/building-and-energy/energy-and-natural-resources/energy-statistics-and-modelling/energy-statistics/electricity-statistics) → `electricity-2025-q1.xlsx`
 
-### 🔄 WAITĀ (Ocean & Marine) - **COMING SOON**  
-- **Status**: Awaiting ocean/marine dataset upload
-- **Planned Data**: Tide data, fishing conditions, marine weather
-- **Planned Sources**: [LINZ Tide Predictions](https://www.linz.govt.nz/products-services/tides-and-tidal-streams/tide-predictions), NIWA marine data, Fisheries NZ
-- **Sample Queries**: Will be created once data is loaded
+**Database Infrastructure:**
+- **Schema:** `URU_RANGI`
+- **Stage:** `electricity_data_stage` (CSV format)
+- **File Format:** `electricity_csv_format`
 
-### ✅ WAIPUNA_RANGI (Rain & Water) - **🌊 COMPLETE WATER RISK INTELLIGENCE PLATFORM**
-- **File**: `sample_queries/WAIPUNA_RANGI_climate_queries.sql`
-- **Status**: ✅ **FULLY LOADED & TESTED** - All sample queries verified working
-- **Total Records**: **5,776** across climate, flood, and disaster datasets
-- **Data Coverage**: 89 years of climate data (1933-2022) + real-time flood risk mapping + 57 years of disaster costs
+**Tables:**
+- `electricity_zone_data_5min` - **8,345 records** - 5-minute demand by 14 geographic zones (July 2024)
+- `electricity_generation_by_fuel` - **19 records** - Annual renewable vs fossil fuel breakdown (1974-2030)  
+- `electricity_quarterly_generation` - **101 records** - Historical quarterly generation trends (2000-2025)
 
-#### **📊 Available Tables:**
+**Sample Queries:** [`URU_RANGI_wind_energy_queries.sql`](sample_queries/URU_RANGI_wind_energy_queries.sql)
+- ✅ Peak demand analysis, regional patterns, renewable trends
+- ✅ AI/ML features with lag functions and rolling averages  
+- ✅ Cortex AI optimization strategies
+- ✅ Wind energy variability analysis
 
-**🌧️ Climate Data (NIWA)**:
-- `rainfall_annual` - **277 records** (3 stations, 1933-2022) 
-- `rainfall_monthly` - **4,245 records** (monthly patterns, 89 years)
-- `temperature_annual` - **173 records** (1947-1984)
-- `temperature_monthly` - **910 records** (monthly temperature trends)
+---
+
+### 🌊 WAIPUNA_RANGI (Rain & Water) - **✅ PRODUCTION READY**
+
+**Raw Data Sources:**
+- [NIWA Climate Station Statistics](https://niwa.co.nz/climate-and-weather/climate-data/national-climate-database/climate-stations-statistics) → `1464_*.csv`, `2109_*.csv`, `4960_*.csv` (3 stations)
+- [Waikato Regional Hazards Portal](https://www.waikatoregion.govt.nz/services/regional-hazards-and-emergency-management/regional-hazards-portal/) → `WaipaDistrictPlan_SpecialFeature_Area_Flood_*.csv/.geojson`
+- [ICNZ Cost of Natural Disasters](https://www.icnz.org.nz/industry/cost-of-natural-disasters/) → `Cost Of Natural Disasters Table (NZ).csv`
+
+**Database Infrastructure:**
+- **Schema:** `WAIPUNA_RANGI`
+- **Stage:** `climate_data_stage` (NIWA CSV format)
+- **File Format:** `niwa_csv_format`
+
+**Tables:**
+- `rainfall_annual` - **277 records** - Annual rainfall (3 stations, 1933-2022)
+- `rainfall_monthly` - **4,245 records** - Monthly patterns (89 years)
+- `temperature_annual` - **173 records** - Annual temperature trends (1947-1984)
+- `temperature_monthly` - **910 records** - Monthly temperature data
 - `climate_stations` - Station metadata (Historic 1464, Primary 2109, Modern 4960)
-- **Source**: [NIWA Climate Station Statistics](https://niwa.co.nz/climate-and-weather/climate-data/national-climate-database/climate-stations-statistics)
-
-**🗺️ Flood Risk Data (Waikato Regional Hazards Portal)**:
 - `waipa_flood_zones` - **13 zones** covering **23.9 km²** of flood-prone areas
-- `waipa_flood_boundaries` - **13 GeoJSON polygons** for spatial analysis (complexity: simple → highly complex)
-- **Source**: [Waikato Regional Hazards Portal](https://www.waikatoregion.govt.nz/services/regional-hazards-and-emergency-management/regional-hazards-portal/)
-- **Coverage**: Waipa River, Puniu River, Mangapiko Stream + flood detention dams
-
-**💰 Disaster Cost Data (ICNZ)**:
+- `waipa_flood_boundaries` - **13 GeoJSON polygons** for spatial analysis
 - `icnz_disaster_costs` - **141 disaster events** (1968-2025, $4.5B+ total impact)
-- **Water-related events**: **97 events** totaling **$1,956M NZD** (inflation-adjusted)
-- **Source**: [ICNZ Cost of Natural Disasters](https://www.icnz.org.nz/industry/cost-of-natural-disasters/)
-- **Major events**: Cyclone Gabrielle ($1,970M), Timaru Hail ($213M), Canterbury Storms ($86M)
 
-#### **🤖 AI-Ready Features:**
-- **Verified Cortex AISQL Functions**: `AI_COMPLETE`, `AI_CLASSIFY`, `AI_FILTER`, `AI_AGG`, `AI_SENTIMENT`
-- **Available Models**: llama3.1-8b, llama3.1-70b, mistral-large2, mixtral-8x7b, mistral-7b
-- **Regions**: AWS AP Southeast 2 (Sydney), AWS AP Northeast 1 (Tokyo)
+**Sample Queries:** [`WAIPUNA_RANGI_climate_queries.sql`](sample_queries/WAIPUNA_RANGI_climate_queries.sql)
+- ✅ Climate trend analysis with rolling averages
+- ✅ Flood risk assessment with spatial analysis
+- ✅ Disaster cost modeling and correlation
+- ✅ AI-powered risk reports and pattern detection
 
-#### **📈 Sample Query Categories (All Tested ✅):**
-- **Climate Trend Analysis**: Rolling averages, extreme weather detection, seasonal patterns
-- **Flood Risk Assessment**: Spatial analysis, complexity mapping, watercourse classification  
-- **Disaster Cost Modeling**: Financial impact analysis, water-related event correlation
-- **Integrated Risk Intelligence**: Multi-source risk scoring, extreme weather-disaster correlation
-- **AI-Powered Insights**: Automated risk reports, severity classification, pattern detection
+---
 
-**🎯 Use Cases**: Flood prediction & early warning, disaster cost modeling, spatial risk assessment, climate adaptation planning, emergency response optimization, AI-powered flood insurance pricing, water resource management
+### 🌊 WAITA (Ocean & Marine) - **✅ PRODUCTION READY + RAG**
 
-### 🔄 HIWA_I_TE_RANGI (Travel & Tourism) - **COMING SOON**
-- **Status**: Awaiting travel/tourism dataset upload
-- **Planned Data**: Flight data, events, tourism patterns
-- **Planned Sources**: Tourism NZ, Stats NZ tourism data, airport/airline APIs
-- **Sample Queries**: Will be created once data is loaded
+**Raw Data Sources:**
+- [LINZ Tide Predictions](https://www.linz.govt.nz/products-services/tides-and-tidal-streams/tide-predictions) → `Auckland_*.csv`, `Wellington_*.csv`, `Christchurch_*.csv`, etc. (6 ports, 2024-2026)
+- [Maritime NZ](https://maritimenz.govt.nz/media/accacvzc/accident-incident-reporting-data.csv) → `accident-incident-reporting-data.csv`
+- [Fisheries NZ](https://www.mpi.govt.nz/fishing-aquaculture/recreational-fishing/fishing-rules/) → `fish-pdf/*.pdf` (8 regional fishing regulation documents)
 
-## 🚀 How to Use
+**Database Infrastructure:**
+- **Schema:** `WAITA`
+- **Stages:** 
+  - `marine_data_stage` (CSV format)
+  - `fishing_documents_stage` (PDF documents with encryption)
+- **File Formats:** 
+  - `waita_csv_format` (Marine CSV data)
+  - `waita_pdf_format` (Document processing)
+- **Cortex Search Service:** `fishing_documents_search_service` (RAG-enabled)
 
-### **Ready for AI Innovation:**
+**Tables:**
+- `tide_predictions` - **29,218 records** - LINZ tide data (6 ports, 2024-2026) with GEOGRAPHY points
+- `tide_ports` - **6 records** - Port metadata with WGS 84 coordinates
+- `tide_range_analysis` - **View** - Statistical analysis of tidal ranges
+- `maritime_incidents` - **2,096 records** - Accident/incident reports (2018-2024)
+- `fishing_documents` - **8 records** - Parsed PDF regulations with Cortex
+- `fishing_document_chunks` - **Document chunks** - Optimized for semantic search (≤512 tokens)
 
-**1. URU_RANGI (Energy Analytics)**:
-```sql
-USE DATABASE nz_partner_hackathon;
-USE SCHEMA URU_RANGI;
--- 8,465 records: 5-min demand, fuel mix, quarterly trends
-```
+**Advanced Features:**
+- ✅ **Cortex PARSE_DOCUMENT** - Extract text and layout from PDF regulations
+- ✅ **SPLIT_TEXT_RECURSIVE_CHARACTER** - Intelligent text chunking
+- ✅ **Cortex Search Service** - Natural language Q&A on fishing regulations
+- ✅ **RAG Fishing Trip Planner** - Multi-source data integration with AI synthesis
 
-**2. WAIPUNA_RANGI (Water Risk Intelligence)**:
-```sql
-USE DATABASE nz_partner_hackathon;
-USE SCHEMA WAIPUNA_RANGI;
--- 5,776 records: climate data, flood mapping, disaster costs
-```
+**Sample Queries:** [`WAITA_marine_tide_queries.sql`](sample_queries/WAITA_marine_tide_queries.sql)
+- ✅ Tide prediction analysis with geographic functions
+- ✅ Maritime incident safety analytics
+- ✅ **Comprehensive RAG implementation** - "Is this the right time to go fishing?"
+- ✅ Document Q&A with semantic search
 
-**3. WAITA (Ocean & Marine)**:
-```sql
-USE DATABASE nz_partner_hackathon;
-USE SCHEMA WAITA;
--- 31,314 records: LINZ tide predictions, maritime incidents, + PDF document processing
--- ✅ WORKING: Comprehensive RAG fishing trip planner (CTE + Pipe operator versions)
--- ✅ WORKING: Cortex Search on fishing regulation PDFs for intelligent Q&A
--- FEATURED: "Is this the right time to go fishing?" complete implementation
-```
+---
 
-**4. Other Themes**: Sample query files will be created as datasets are added
+### 🌾 TIPUĀNUKU (Food & Agriculture) - **🔄 TEMPLATE READY**
 
-### **Database Access**
+**Status:** Schema created with comprehensive template queries prepared for food/agriculture datasets
 
-```sql
--- Connect to the shared hackathon database
-USE DATABASE nz_partner_hackathon;
+**Database Infrastructure:**
+- **Schema:** `TIPUANUKU` *(created but no data loaded)*
 
--- Explore all available schemas
-SHOW SCHEMAS;
+**Planned Data Sources:**
+- Stats NZ agriculture production data
+- MPI food safety datasets  
+- Local council restaurant/food service data
+- Nutrition and dietary information
 
--- Energy AI projects:
-USE SCHEMA URU_RANGI;
-SHOW TABLES; -- electricity_zone_data_5min, electricity_generation_by_fuel, etc.
+**Template Queries:** [`TIPUANUKU_food_agriculture_queries.sql`](sample_queries/TIPUANUKU_food_agriculture_queries.sql)
+- 🔄 Food production analysis templates
+- 🔄 Restaurant review processing examples
+- 🔄 Supply chain tracking patterns  
+- 🔄 Nutrition and dietary analysis templates
+- 🔄 AI-powered food recommendation systems
 
--- Water risk AI projects:
-USE SCHEMA WAIPUNA_RANGI;
-SHOW TABLES; -- rainfall_annual, waipa_flood_zones, icnz_disaster_costs, etc.
+---
 
--- Marine AI projects:
-USE SCHEMA WAITA;
-SHOW TABLES; -- tide_predictions, tide_ports, tidal_range_analysis, etc.
+### ✈️ HIWA_I_TE_RANGI (Travel & Tourism) - **🔄 SCHEMA READY**
 
--- Sample query examples:
-SELECT * FROM URU_RANGI.electricity_zone_data_5min LIMIT 10;
-SELECT * FROM WAIPUNA_RANGI.rainfall_annual WHERE year >= 2020;
-SELECT * FROM WAITA.tide_predictions WHERE date >= '2024-01-01' LIMIT 10;
-```
+**Status:** Schema created, awaiting tourism/travel datasets
 
-## 📋 Data Sources & Attribution
+**Database Infrastructure:**
+- **Schema:** `HIWA_I_TE_RANGI` *(created but no tables or data)*
 
-All datasets include proper attribution to their original sources and are ready for commercial AI applications:
+**Planned Data Sources:**
+- Tourism New Zealand visitor data
+- Stats NZ tourism statistics
+- Airport/airline arrival data
+- Event and attraction information
 
-### **✅ Active Government Data Sources**
-- **MBIE (Ministry of Business, Innovation & Employment)**: Electricity generation, fuel mix, and historical trends
-- **Transpower**: Real-time electricity demand and grid load data (5-minute intervals)
-- **NIWA (National Institute of Water & Atmospheric Research)**: Climate station statistics (89 years, 1933-2022)
-- **Waikato Regional Council**: Flood hazard mapping and spatial risk data
-- **ICNZ (Insurance Council of New Zealand)**: Natural disaster insurance costs and financial impact data
-- **LINZ (Land Information New Zealand)**: Tide predictions for 6 major NZ ports (2024-2026) 
-- **Maritime NZ**: Accident and incident reports with safety analytics (2018-2024)
-- **Fisheries NZ**: PDF regulations ready for Cortex Search document processing
+---
 
-### **🆕 AI Document Processing Capabilities**
-- **Snowflake Cortex PARSE_DOCUMENT**: Extract text and layout from PDF regulations
-- **SPLIT_TEXT_RECURSIVE_CHARACTER**: Intelligent text chunking for semantic search
-- **Cortex Search Service**: Natural language Q&A on fishing regulations and marine safety documents
-- **✅ WORKING: Comprehensive RAG Fishing Trip Planner**: Multi-source data integration with AI synthesis
-- **Multi-modal AI**: Ready for images, PDFs, and structured data integration
+### 🏛️ FOUNDATIONAL (Socio-Economic) - **🔄 SCHEMA READY**
 
-### **🔄 Planned Data Sources**
-- **Stats NZ**: Agriculture, tourism, and socio-economic data
-- **MPI (Ministry for Primary Industries)**: Food safety and agricultural production data
+**Status:** Schema created, awaiting foundational socio-economic datasets
 
-### **Data Processing & Quality**
-- ✅ Raw data files processed into **clean, analysis-ready tables**
-- ✅ Original source URLs and collection dates **preserved in metadata**
-- ✅ Data transformations **documented in processing scripts**
-- ✅ All sample queries **tested and verified working**
-- ✅ **Snowflake Cortex AI functions** verified for Asia Pacific regions
+**Database Infrastructure:**
+- **Schema:** `FOUNDATIONAL` *(created but no tables or data)*
+
+**Planned Data Sources:**
+- Stats NZ population and demographic data
+- Household economic survey data
+- Regional development indicators
+- Infrastructure and connectivity metrics
+
+---
 
 ## 📁 Repository Structure
 
@@ -204,37 +175,63 @@ All datasets include proper attribution to their original sources and are ready 
 nz-partner-hackathon/
 ├── README.md                          # This file - complete project overview
 ├── setup.sql                          # Database and schema creation
-├── data/                              # Raw data files (CSV, Excel, GeoJSON)
-├── processed_data/                    # Clean, processed CSV files  
+├── data/                              # Raw data files (CSV, Excel, GeoJSON, PDF)
+│   ├── fish-pdf/                      # 8 PDF fishing regulation documents
+│   ├── *_tide_predictions.csv         # LINZ tide data (6 ports × 3 years)
+│   ├── accident-incident-reporting-data.csv  # Maritime NZ incidents
+│   ├── electricity-2025-q1.xlsx       # MBIE electricity statistics
+│   ├── Zone Data (01 Jul - 29 Jul).csv    # Transpower load data
+│   ├── Cost Of Natural Disasters Table.csv # ICNZ disaster costs
+│   ├── 1464_*.csv, 2109_*.csv, 4960_*.csv # NIWA climate data (3 stations)
+│   └── WaipaDistrictPlan_*.csv/.geojson    # Flood mapping data
+├── processed_data/                    # Clean, processed CSV files ready for loading
+│   ├── tide_predictions_combined.csv  # Combined LINZ tide data
+│   ├── maritime_incidents_processed.csv   # Cleaned incident reports
+│   ├── electricity_*_final.csv        # Processed electricity data
+│   ├── rainfall_*_combined.csv        # Merged rainfall datasets
+│   ├── temperature_*_combined.csv     # Merged temperature datasets
+│   └── icnz_disaster_costs.csv        # Processed disaster cost data
 ├── scripts/                          # Data processing and loading scripts
 │   ├── process_waipuna_rangi_complete.py   # NIWA climate + flood + disaster processing
 │   ├── setup_waipuna_rangi.sql            # WAIPUNA_RANGI database setup
 │   ├── complete_setup.sql                 # URU_RANGI database setup
+│   ├── setup_waita_marine.sql             # WAITA database setup
+│   ├── setup_cortex_fishing_documents.sql # RAG and document processing setup
+│   ├── process_tide_data.py               # LINZ tide data processing
+│   ├── process_maritime_incidents.py      # Maritime incident data cleaning
 │   └── data_sharing_setup.sql             # Participant access management
 └── sample_queries/                    # Production-ready SQL examples
     ├── URU_RANGI_wind_energy_queries.sql      # Energy AI examples (✅ tested)
     ├── WAIPUNA_RANGI_climate_queries.sql      # Water risk AI examples (✅ tested)
     ├── WAITA_marine_tide_queries.sql          # Marine AI + RAG examples (✅ tested)
-    ├── TIPUANUKU_food_agriculture_queries.sql # Food AI examples (🔄 pending data)
+    ├── TIPUANUKU_food_agriculture_queries.sql # Food AI templates (🔄 ready for data)
     └── query_template.sql                     # Template for new themes
 ```
 
-## 🎯 **Hackathon Ready Status**
+## 🤖 AI & Technology Features
 
-### **🚀 READY FOR IMMEDIATE USE:**
-1. **URU_RANGI (Energy Analytics)**: 8,465 records across 3 tables
-2. **WAIPUNA_RANGI (Water Risk Intelligence)**: 5,776 records across 8 tables  
-3. **WAITA (Marine & Ocean Intelligence)**: 31,314 records + comprehensive RAG fishing planner
-4. **Total**: 45,555 production records + verified AI examples + working RAG implementation
+### **Snowflake Cortex AI Functions (Verified Working)**
+- **Models Available:** llama3.1-8b, llama3.1-70b, mistral-large2, mixtral-8x7b, mistral-7b
+- **Regions:** AWS AP Southeast 2 (Sydney), AWS AP Northeast 1 (Tokyo)
+- **Functions:** `AI_COMPLETE`, `AI_CLASSIFY`, `AI_FILTER`, `AI_AGG`, `AI_SENTIMENT`
 
-### **🔧 Adding New Datasets**
+### **Document Processing & RAG**
+- **PARSE_DOCUMENT:** Extract text and layout from PDFs
+- **SPLIT_TEXT_RECURSIVE_CHARACTER:** Intelligent chunking for semantic search
+- **Cortex Search Service:** Natural language Q&A on documents
+- **Multi-modal AI:** Ready for images, PDFs, and structured data integration
 
-When adding data for remaining themes:
-1. Load data into appropriate schema (`TIPUANUKU`, `WAITA`, `HIWA_I_TE_RANGI`)
-2. Document data source URLs and attribution in README
-3. Create corresponding sample query file using `query_template.sql`
-4. Test all queries and verify Cortex AI functions work
-5. Update this README with available tables, sources, and use cases
+### **Geographic & Spatial Features**
+- **GEOGRAPHY Data Type:** WGS 84 coordinate system for tide predictions
+- **GeoJSON Support:** Flood boundary polygons for spatial analysis
+- **Spatial Functions:** Distance calculations, area measurements, boundary analysis
+
+### **Data Processing Excellence**
+- ✅ All sample queries tested and verified working
+- ✅ Raw data preserved with original source URLs and collection dates
+- ✅ Data transformations documented in processing scripts  
+- ✅ Clean, analysis-ready tables with proper data types
+- ✅ Error handling and data validation implemented
 
 ---
 
