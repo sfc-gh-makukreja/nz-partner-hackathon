@@ -31,6 +31,7 @@ feat: add superhero generator with Cortex AISQL
 - **Include context**: Reference issues, features, or requirements
 - **Be specific**: Instead of "fix bug" use "fix connection timeout in AI analysis"
 - **List key changes**: Use bullet points for multiple changes
+- **⚠️ NEVER include data/query results**: Do not paste actual data, query outputs, or database results in commit messages
 
 ## Examples
 ```

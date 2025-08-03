@@ -398,7 +398,7 @@ SELECT
 FROM tide_ports p
 LEFT JOIN maritime_incidents m ON ST_DWITHIN(p.location_point, m.location_point, 50000) -- 50km radius
 WHERE m.location_point IS NOT NULL
-GROUP BY p.port_name, p.location_point
+GROUP BY p.port_name
 ORDER BY nearby_incidents DESC;
 
 -- Vessel age vs incident severity correlation
