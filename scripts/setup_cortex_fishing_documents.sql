@@ -168,8 +168,8 @@ WITH document_chunks AS (
         fd.document_id,
         fd.file_name,
         fd.nz_region,
-        c.SEQ as chunk_sequence,
-        c.VALUE as chunk_text
+        c.INDEX as chunk_sequence,  -- Use INDEX instead of SEQ for proper sequencing
+        c.VALUE::STRING as chunk_text
     FROM fishing_documents fd,
     LATERAL FLATTEN(
         input => SNOWFLAKE.CORTEX.SPLIT_TEXT_RECURSIVE_CHARACTER(
@@ -511,8 +511,8 @@ search_results AS (
             SNOWFLAKE.CORTEX.SEARCH_PREVIEW(
                 'fishing_regulations_search',
                 '{
-                    "query": "daily bag limit snapper Auckland region",
-                    "columns": ["chunk_text", "nz_region", "document_section"],
+                    "query": "If I catch 8 snapper in Auckland waters today, am I within legal limits?",
+                    "columns": ["file_name", "chunk_text", "document_section", "nz_region"],
                     "limit": 3
                 }'
             )
@@ -535,10 +535,9 @@ combined_context AS (
 ai_analysis AS (
     SELECT 
         cc.question,
-        SNOWFLAKE.CORTEX.COMPLETE(
-            'mistral-large2',
-            PROMPT(
-                'You are a New Zealand fishing regulations expert. Based on the following fishing regulations context, answer the user''s question: {0}
+        cc.context_text,
+        PROMPT(
+'You are a New Zealand fishing regulations expert. Based on the following fishing regulations context, answer the user''s question: {0}
 
 REGULATIONS CONTEXT:
 {1}
@@ -551,72 +550,20 @@ Please provide:
 Answer format: Start with YES or NO, then provide detailed explanation.',
                 cc.question,
                 cc.context_text
-            )
-        ) as compliance_answer
+        ) as prompt,
+        SNOWFLAKE.CORTEX.COMPLETE('mistral-large2', prompt) as compliance_answer
     FROM combined_context cc
 )
 
 SELECT 
     'Fishing Compliance Check' as analysis_type,
     question as user_question,
-    compliance_answer as ai_response
-FROM ai_analysis;
+    compliance_answer as ai_response,
+    context_text as regulations_context,
+    prompt:template::string as prompt_template
+FROM ai_analysis
+;
 
--- Example 5: Multiple question RAG pattern for different fishing scenarios
-SELECT 'RAG EXAMPLE: Multiple Fishing Questions Pattern' as example_name;
-
-WITH fishing_questions AS (
-    SELECT question, search_query FROM VALUES 
-        ('What is the minimum size for blue cod in Southland?', 'blue cod minimum size Southland'),
-        ('Are there any marine reserves near Auckland?', 'marine reserve protected area Auckland'),
-        ('What fishing methods are prohibited?', 'fishing method prohibited net hook restrictions')
-    AS t(question, search_query)
-),
-
-all_search_results AS (
-    SELECT 
-        fq.question,
-        fq.search_query,
-        CASE 
-            WHEN fq.search_query = 'blue cod minimum size Southland' THEN
-                PARSE_JSON(SNOWFLAKE.CORTEX.SEARCH_PREVIEW('fishing_regulations_search', '{"query": "blue cod minimum size Southland", "columns": ["chunk_text"], "limit": 2}'))['results']
-            WHEN fq.search_query = 'marine reserve protected area Auckland' THEN  
-                PARSE_JSON(SNOWFLAKE.CORTEX.SEARCH_PREVIEW('fishing_regulations_search', '{"query": "marine reserve protected area Auckland", "columns": ["chunk_text"], "limit": 2}'))['results']
-            WHEN fq.search_query = 'fishing method prohibited net hook restrictions' THEN
-                PARSE_JSON(SNOWFLAKE.CORTEX.SEARCH_PREVIEW('fishing_regulations_search', '{"query": "fishing method prohibited restrictions", "columns": ["chunk_text"], "limit": 2}'))['results']
-        END as search_results
-    FROM fishing_questions fq
-),
-
-answers AS (
-    SELECT 
-        asr.question,
-        SNOWFLAKE.CORTEX.COMPLETE(
-            'mistral-large2',
-            PROMPT(
-                'Based on these NZ fishing regulations, answer this question concisely: {0}
-
-REGULATIONS:
-{1}
-
-Provide a direct, practical answer in 2-3 sentences.',
-                asr.question,
-                ARRAY_TO_STRING(
-                    ARRAY_AGG(r.value:chunk_text::STRING) WITHIN GROUP (ORDER BY r.index),
-                    '\n\n'
-                )
-            )
-        ) as answer
-    FROM all_search_results asr,
-    LATERAL FLATTEN(input => asr.search_results) r
-    GROUP BY asr.question
-)
-
-SELECT 
-    'Multi-Question Fishing Assistant' as assistant_type,
-    question,
-    answer
-FROM answers;
 
 -- ================================================================
 -- SECTION 10: SUCCESS CONFIRMATION & FINAL SUMMARY
