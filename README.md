@@ -7,15 +7,15 @@ This repository contains production-ready datasets and sample queries for Snowfl
 | Theme | Status | Total Records | Data Coverage | Sample Queries |
 |-------|---------|---------------|---------------|----------------|
 | ⚡ **URU_RANGI** | ✅ **COMPLETE** | **8,465** | 5-min electricity demand, fuel mix (1974-2030), quarterly trends | [`URU_RANGI_wind_energy_queries.sql`](sample_queries/URU_RANGI_wind_energy_queries.sql) |
-| 🌊 **WAIPUNA_RANGI** | ✅ **COMPLETE** | **5,776** | Climate data (89 years), flood mapping, disaster costs | [`WAIPUNA_RANGI_climate_queries.sql`](sample_queries/WAIPUNA_RANGI_climate_queries.sql) |
+| ⛈️ **WAIPUNA_RANGI** | ✅ **COMPLETE** | **5,776** | Climate data (89 years), flood mapping, disaster costs | [`WAIPUNA_RANGI_climate_queries.sql`](sample_queries/WAIPUNA_RANGI_climate_queries.sql) |
 | 🌊 **WAITA** | ✅ **COMPLETE** | **31,314** | LINZ tide predictions, maritime incidents, PDF RAG system | [`WAITA_marine_tide_queries.sql`](sample_queries/WAITA_marine_tide_queries.sql) |
 | 🌾 **TIPUĀNUKU** | 🔄 **Template Ready** | - | Template queries prepared for agriculture data | [`TIPUANUKU_food_agriculture_queries.sql`](sample_queries/TIPUANUKU_food_agriculture_queries.sql) |
-| ✈️ **HIWA_I_TE_RANGI** | 🔄 **Schema Only** | - | Schema created, awaiting tourism/travel data | *No queries yet* |
+| ✈️ **HIWA_I_TE_RANGI** | ✅ **COMPLETE** | **183,142** | EventFinda events + Stats NZ tourism + NZ airfares (162K flights) | [`HIWA_I_TE_RANGI_tourism_events_queries.sql`](sample_queries/HIWA_I_TE_RANGI_tourism_events_queries.sql) |
 | 🏛️ **FOUNDATIONAL** | 🔄 **Schema Only** | - | Schema created, awaiting socio-economic data | *No queries yet* |
 
 ### 🚀 **Production Ready:**
-- **3 Complete Themes** with verified data and working queries
-- **45,555 Total Records** across climate, energy, marine safety, and financial datasets  
+- **4 Complete Themes** with verified data and working queries
+- **228,697 Total Records** across climate, energy, marine safety, events, tourism, airfares, and financial datasets  
 - **Real Government Data** from MBIE, Transpower, NIWA, ICNZ, LINZ, Maritime NZ, Fisheries NZ
 - **Snowflake Cortex AI** examples with verified Asia Pacific availability
 - **RAG Document Processing** operational with PDF fishing regulations
@@ -48,7 +48,7 @@ This repository contains production-ready datasets and sample queries for Snowfl
 
 ---
 
-### 🌊 WAIPUNA_RANGI (Rain & Water) - **✅ PRODUCTION READY**
+### ⛈️ WAIPUNA_RANGI (Rain & Water) - **✅ PRODUCTION READY**
 
 **Raw Data Sources:**
 - [NIWA Climate Station Statistics](https://niwa.co.nz/climate-and-weather/climate-data/national-climate-database/climate-stations-statistics) → `1464_*.csv`, `2109_*.csv`, `4960_*.csv` (3 stations)
@@ -139,18 +139,65 @@ This repository contains production-ready datasets and sample queries for Snowfl
 
 ---
 
-### ✈️ HIWA_I_TE_RANGI (Travel & Tourism) - **🔄 SCHEMA READY**
+### ✈️ HIWA_I_TE_RANGI (Travel & Tourism) - **✅ COMPLETE TOURISM PLATFORM**
 
-**Status:** Schema created, awaiting tourism/travel datasets
+**Raw Data Sources:**
+- [EventFinda RSS Feed](https://www.eventfinda.co.nz/feed/events/new-zealand/whatson/upcoming.rss) → `eventfinda_events.csv` (20 current events)
+- [Kaggle NZ Airfares](https://www.kaggle.com/datasets/shashwatwork/airfares-in-new-zealand) → `NZ airfares.csv` (162,833 flights, Sep-Dec 2019)
+- [Stats NZ Visitor Arrivals](https://infoshare.stats.govt.nz/SelectVariables.aspx?pxID=67ad24ca-aa48-48a1-9183-c36ba84d15f9) → `ITM475712_*.csv` (102 years, 1923-2024)
+- [Stats NZ Passenger Movements](https://infoshare.stats.govt.nz/SelectVariables.aspx?pxID=8b80adf1-4cd5-4b98-a06e-7ef5c934b2a0) → `ITM332206_*.csv` (164 years, 1861-2024)
+- [Stats NZ Guest Nights](https://infoshare.stats.govt.nz/SelectVariables.aspx?pxID=d44894b7-7ee0-43f6-b98a-200a0c9120ac) → `ACS348801_*.csv` (8,800 regional records, 1996-2019)
+- [Stats NZ Occupancy Rates](https://infoshare.stats.govt.nz/SelectVariables.aspx?pxID=a8d045fa-36bd-40b4-84ca-33afa1b04e46) → `ACS348401_*.csv` (11,120 regional records, 1996-2019)
+- [Stats NZ Migrant Arrivals](https://infoshare.stats.govt.nz/SelectVariables.aspx?pxID=8b80adf1-4cd5-4b98-a06e-7ef5c934b2a0) → `ITM553006_*.csv` (23 years, 2003-2025)
 
 **Database Infrastructure:**
-- **Schema:** `HIWA_I_TE_RANGI` *(created but no tables or data)*
+- **Schema:** `HIWA_I_TE_RANGI`
+- **Stage:** `tourism_data_stage`
+- **File Format:** `tourism_csv_format`
+- **Processing Scripts:** `process_tourism_data.py`, `fetch_eventfinda_data.py`, `process_airfares_data.py`
+- **Complete Setup:** `setup_complete_hiwa_i_te_rangi.sh`
 
-**Planned Data Sources:**
-- Tourism New Zealand visitor data
-- Stats NZ tourism statistics
-- Airport/airline arrival data
-- Event and attraction information
+**Tables:**
+- `eventfinda_events` - **20 records** - Real-time events from RSS feed (July-August 2025)
+- `nz_airfares` - **162,833 records** - Domestic flight pricing data (Sep-Dec 2019)
+- `visitor_arrivals` - **102 records** - Annual visitor arrival totals (1923-2024)
+- `passenger_movements` - **164 records** - Annual arrivals/departures data (1861-2024)  
+- `guest_nights_by_region` - **8,800 records** - Monthly accommodation demand by region (1996-2019)
+- `occupancy_rates_by_region` - **11,120 records** - Monthly occupancy rates by region (1996-2019)
+- `migrant_arrivals` - **23 records** - Annual migrant arrival estimates (2003-2025)
+
+**Analytical Views:**
+- `events_monthly_summary` - Event distribution by month/category/region
+- `tourism_events_correlation` - Events vs accommodation demand correlation
+- `regional_tourism_performance` - Regional tourism KPI analysis
+- `tourism_cost_analysis` - **NEW** Events + airfares tourism value scoring
+- `regional_airfare_analysis` - **NEW** Regional flight accessibility and pricing analysis
+
+**Event Categories (Current):**
+- Sports & Recreation (5 events)
+- Music & Performance (3 events) 
+- Arts & Culture (3 events)
+- Comedy & Entertainment (2 events)
+- Education & Workshops (1 event)
+- Other (6 events)
+
+**Regional Coverage:**
+- Wellington (6 events), Auckland (5 events), Taranaki (2 events), Canterbury (1 event), Hawke's Bay (1 event)
+
+**Historical Data Coverage:**
+- **100+ Years** of visitor arrival trends
+- **160+ Years** of passenger movement data
+- **20+ Years** of regional accommodation statistics
+- **Real-time** event monitoring via RSS feed
+
+**Sample Queries:** [`HIWA_I_TE_RANGI_tourism_events_queries.sql`](sample_queries/HIWA_I_TE_RANGI_tourism_events_queries.sql)
+- ✅ Event tourism impact analysis with historical context
+- ✅ Regional event distribution and demand patterns
+- ✅ AI-powered tourism demand forecasting using 100+ years of data
+- ✅ Cross-theme integration (events + weather/marine data)
+- ✅ Event-driven accommodation demand prediction
+- ✅ Long-term tourism trend analysis (1861-2024)
+- ✅ Migration pattern analysis and tourism correlation
 
 ---
 
